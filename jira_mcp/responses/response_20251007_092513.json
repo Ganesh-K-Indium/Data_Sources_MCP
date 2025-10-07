@@ -1,0 +1,140 @@
+{
+    "messages": [
+        {
+            "content": "Get statistics on all medium priority issues under project test",
+            "additional_kwargs": {},
+            "response_metadata": {},
+            "type": "human",
+            "name": null,
+            "id": "a79aa68f-6de7-41f2-93fb-ab3b1572dee4",
+            "example": false
+        },
+        {
+            "content": "",
+            "additional_kwargs": {
+                "tool_calls": [
+                    {
+                        "id": "call_a5yoBlFhmnJ19RudvYlppnDo",
+                        "function": {
+                            "arguments": "{\"project_key\":\"TEST\",\"priority\":\"Medium\"}",
+                            "name": "search_issues"
+                        },
+                        "type": "function"
+                    }
+                ],
+                "refusal": null
+            },
+            "response_metadata": {
+                "token_usage": {
+                    "completion_tokens": 20,
+                    "prompt_tokens": 1027,
+                    "total_tokens": 1047,
+                    "completion_tokens_details": {
+                        "accepted_prediction_tokens": 0,
+                        "audio_tokens": 0,
+                        "reasoning_tokens": 0,
+                        "rejected_prediction_tokens": 0
+                    },
+                    "prompt_tokens_details": {
+                        "audio_tokens": 0,
+                        "cached_tokens": 0
+                    }
+                },
+                "model_name": "gpt-4o-2024-08-06",
+                "system_fingerprint": "fp_cbf1785567",
+                "id": "chatcmpl-CNt4ys3JoiBIqwy6661lDlUZC6YUo",
+                "service_tier": "default",
+                "finish_reason": "tool_calls",
+                "logprobs": null
+            },
+            "type": "ai",
+            "name": "JiraLangGraphAgent",
+            "id": "run--160285d3-2ece-478d-bb72-8c7a4d88f390-0",
+            "example": false,
+            "tool_calls": [
+                {
+                    "name": "search_issues",
+                    "args": {
+                        "project_key": "TEST",
+                        "priority": "Medium"
+                    },
+                    "id": "call_a5yoBlFhmnJ19RudvYlppnDo",
+                    "type": "tool_call"
+                }
+            ],
+            "invalid_tool_calls": [],
+            "usage_metadata": {
+                "input_tokens": 1027,
+                "output_tokens": 20,
+                "total_tokens": 1047,
+                "input_token_details": {
+                    "audio": 0,
+                    "cache_read": 0
+                },
+                "output_token_details": {
+                    "audio": 0,
+                    "reasoning": 0
+                }
+            }
+        },
+        {
+            "content": "{\"issues\":[{\"expand\":\"renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations\",\"id\":\"10033\",\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/issue/10033\",\"key\":\"TEST-2\",\"fields\":{\"summary\":\"NVIDIA\",\"issuetype\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/issuetype/10001\",\"id\":\"10001\",\"description\":\"A small, distinct piece of work.\",\"iconUrl\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium\",\"name\":\"Task\",\"subtask\":false,\"avatarId\":10318,\"entityId\":\"e7bcf2fd-9fc2-49be-bc08-2a5adcfa2675\",\"hierarchyLevel\":0},\"attachment\":[{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/attachment/10002\",\"id\":\"10002\",\"filename\":\"NVIDIA.pdf\",\"author\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/user?accountId=712020%3Adc930f29-fd72-4525-9951-d7dca5e72fdc\",\"accountId\":\"712020:dc930f29-fd72-4525-9951-d7dca5e72fdc\",\"emailAddress\":\"ganeshkrishnadoss@gmail.com\",\"avatarUrls\":{\"48x48\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"24x24\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"16x16\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"32x32\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\"},\"displayName\":\"Ganesh K\",\"active\":true,\"timeZone\":\"Asia/Calcutta\",\"accountType\":\"atlassian\"},\"created\":\"2025-09-18T14:34:58.978+0530\",\"size\":3359546,\"mimeType\":\"application/pdf\",\"content\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/attachment/content/10002\"}],\"created\":\"2025-09-18T14:34:31.266+0530\",\"comment\":{\"comments\":[],\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/issue/10033/comment\",\"maxResults\":0,\"total\":0,\"startAt\":0},\"reporter\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/user?accountId=712020%3Adc930f29-fd72-4525-9951-d7dca5e72fdc\",\"accountId\":\"712020:dc930f29-fd72-4525-9951-d7dca5e72fdc\",\"emailAddress\":\"ganeshkrishnadoss@gmail.com\",\"avatarUrls\":{\"48x48\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"24x24\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"16x16\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"32x32\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\"},\"displayName\":\"Ganesh K\",\"active\":true,\"timeZone\":\"Asia/Calcutta\",\"accountType\":\"atlassian\"},\"assignee\":null,\"priority\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/priority/3\",\"iconUrl\":\"https://ganeshkrishnadoss29.atlassian.net/images/icons/priorities/medium_new.svg\",\"name\":\"Medium\",\"id\":\"3\"},\"updated\":\"2025-09-18T14:34:59.362+0530\",\"status\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/status/10000\",\"description\":\"\",\"iconUrl\":\"https://ganeshkrishnadoss29.atlassian.net/\",\"name\":\"To Do\",\"id\":\"10000\",\"statusCategory\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/statuscategory/2\",\"id\":2,\"key\":\"new\",\"colorName\":\"blue-gray\",\"name\":\"To Do\"}}}},{\"expand\":\"renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations\",\"id\":\"10000\",\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/issue/10000\",\"key\":\"TEST-1\",\"fields\":{\"summary\":\"JHONSON\",\"issuetype\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/issuetype/10001\",\"id\":\"10001\",\"description\":\"A small, distinct piece of work.\",\"iconUrl\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium\",\"name\":\"Task\",\"subtask\":false,\"avatarId\":10318,\"entityId\":\"e7bcf2fd-9fc2-49be-bc08-2a5adcfa2675\",\"hierarchyLevel\":0},\"attachment\":[{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/attachment/10000\",\"id\":\"10000\",\"filename\":\"Jhonson and Jhonosn.pdf\",\"author\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/user?accountId=712020%3Adc930f29-fd72-4525-9951-d7dca5e72fdc\",\"accountId\":\"712020:dc930f29-fd72-4525-9951-d7dca5e72fdc\",\"emailAddress\":\"ganeshkrishnadoss@gmail.com\",\"avatarUrls\":{\"48x48\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"24x24\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"16x16\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"32x32\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\"},\"displayName\":\"Ganesh K\",\"active\":true,\"timeZone\":\"Asia/Calcutta\",\"accountType\":\"atlassian\"},\"created\":\"2025-09-18T12:23:35.878+0530\",\"size\":5405064,\"mimeType\":\"application/pdf\",\"content\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/attachment/content/10000\"}],\"created\":\"2025-09-18T12:18:51.274+0530\",\"comment\":{\"comments\":[],\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/issue/10000/comment\",\"maxResults\":0,\"total\":0,\"startAt\":0},\"reporter\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/user?accountId=712020%3Adc930f29-fd72-4525-9951-d7dca5e72fdc\",\"accountId\":\"712020:dc930f29-fd72-4525-9951-d7dca5e72fdc\",\"emailAddress\":\"ganeshkrishnadoss@gmail.com\",\"avatarUrls\":{\"48x48\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"24x24\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"16x16\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\",\"32x32\":\"https://secure.gravatar.com/avatar/22462920f24854eed7cbc4c11b9e4792?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FGK-1.png\"},\"displayName\":\"Ganesh K\",\"active\":true,\"timeZone\":\"Asia/Calcutta\",\"accountType\":\"atlassian\"},\"assignee\":null,\"priority\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/priority/3\",\"iconUrl\":\"https://ganeshkrishnadoss29.atlassian.net/images/icons/priorities/medium_new.svg\",\"name\":\"Medium\",\"id\":\"3\"},\"updated\":\"2025-09-18T14:33:48.157+0530\",\"status\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/status/10000\",\"description\":\"\",\"iconUrl\":\"https://ganeshkrishnadoss29.atlassian.net/\",\"name\":\"To Do\",\"id\":\"10000\",\"statusCategory\":{\"self\":\"https://ganeshkrishnadoss29.atlassian.net/rest/api/3/statuscategory/2\",\"id\":2,\"key\":\"new\",\"colorName\":\"blue-gray\",\"name\":\"To Do\"}}}}],\"isLast\":true}",
+            "additional_kwargs": {},
+            "response_metadata": {},
+            "type": "tool",
+            "name": "search_issues",
+            "id": "f246957b-60d6-4d6f-b1f3-f42e75c35b83",
+            "tool_call_id": "call_a5yoBlFhmnJ19RudvYlppnDo",
+            "artifact": null,
+            "status": "success"
+        },
+        {
+            "content": "Here are the statistics for medium priority issues under the project \"TEST\":\n\n1. **Issue Key:** TEST-2\n   - **Summary:** NVIDIA\n   - **Type:** Task\n   - **Status:** To Do\n   - **Reporter:** Ganesh K\n   - **Attachments:** 1 (NVIDIA.pdf)\n\n2. **Issue Key:** TEST-1\n   - **Summary:** JHONSON\n   - **Type:** Task\n   - **Status:** To Do\n   - **Reporter:** Ganesh K\n   - **Attachments:** 1 (Jhonson and Jhonosn.pdf)\n\nBoth issues are currently in the \"To Do\" status and have attachments associated with them. If you need more detailed statistics or further actions, please let me know!",
+            "additional_kwargs": {
+                "refusal": null
+            },
+            "response_metadata": {
+                "token_usage": {
+                    "completion_tokens": 162,
+                    "prompt_tokens": 3813,
+                    "total_tokens": 3975,
+                    "completion_tokens_details": {
+                        "accepted_prediction_tokens": 0,
+                        "audio_tokens": 0,
+                        "reasoning_tokens": 0,
+                        "rejected_prediction_tokens": 0
+                    },
+                    "prompt_tokens_details": {
+                        "audio_tokens": 0,
+                        "cached_tokens": 1024
+                    }
+                },
+                "model_name": "gpt-4o-2024-08-06",
+                "system_fingerprint": "fp_cbf1785567",
+                "id": "chatcmpl-CNt509JcteXmjAnvKbIH270YUgopp",
+                "service_tier": "default",
+                "finish_reason": "stop",
+                "logprobs": null
+            },
+            "type": "ai",
+            "name": "JiraLangGraphAgent",
+            "id": "run--430f199b-2397-4077-9836-79998664df5e-0",
+            "example": false,
+            "tool_calls": [],
+            "invalid_tool_calls": [],
+            "usage_metadata": {
+                "input_tokens": 3813,
+                "output_tokens": 162,
+                "total_tokens": 3975,
+                "input_token_details": {
+                    "audio": 0,
+                    "cache_read": 1024
+                },
+                "output_token_details": {
+                    "audio": 0,
+                    "reasoning": 0
+                }
+            }
+        }
+    ]
+}
