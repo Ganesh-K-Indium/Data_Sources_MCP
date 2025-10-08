@@ -543,6 +543,110 @@ def _process_content_files_for_ingestion(content_id: str, download_data: dict,
 
 
 @mcp.tool()
+def create_page(
+    space_key: str,
+    title: str,
+    content: str = "",
+    parent_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new page in a Confluence space.
+    
+    Args:
+        space_key: Confluence space key (e.g., 'TEAM')
+        title: Title of the new page
+        content: HTML content for the page (optional, defaults to basic content)
+        parent_id: Optional parent page ID to create this page under
+    """
+    try:
+        utils = ConfluenceUtils()
+        result = utils.create_page(space_key, title, content, parent_id)
+        return result
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Failed to create page '{title}' in space '{space_key}': {str(e)}",
+            'space_key': space_key,
+            'title': title
+        }
+
+
+@mcp.tool()
+def create_page_and_upload_file(
+    space_key: str,
+    page_title: str,
+    file_path: str,
+    page_content: str = "",
+    filename: Optional[str] = None,
+    comment: Optional[str] = None,
+    parent_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new page and upload a file to it in one operation.
+    
+    Args:
+        space_key: Confluence space key (e.g., 'TEAM')
+        page_title: Title of the new page to create
+        file_path: Absolute path to the file to upload
+        page_content: HTML content for the new page (optional)
+        filename: Optional custom filename (defaults to original filename)
+        comment: Optional comment for the attachment
+        parent_id: Optional parent page ID to create this page under
+    """
+    try:
+        utils = ConfluenceUtils()
+        result = utils.create_page_and_upload_file(
+            space_key, page_title, file_path, page_content, filename, comment, parent_id
+        )
+        return result
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Failed to create page and upload file: {str(e)}",
+            'space_key': space_key,
+            'page_title': page_title,
+            'file_path': file_path
+        }
+
+
+@mcp.tool()
+def upload_file_to_page_or_create(
+    space_key: str,
+    page_title: str,
+    file_path: str,
+    page_content: str = "",
+    filename: Optional[str] = None,
+    comment: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Upload a file to a page, creating the page if it doesn't exist.
+    This is the most flexible option for file uploads.
+    
+    Args:
+        space_key: Confluence space key (e.g., 'TEAM')
+        page_title: Title of the page (will be created if doesn't exist)
+        file_path: Absolute path to the file to upload
+        page_content: HTML content for the page if it needs to be created
+        filename: Optional custom filename (defaults to original filename)
+        comment: Optional comment for the attachment
+    """
+    try:
+        utils = ConfluenceUtils()
+        result = utils.upload_file_to_page_or_create(
+            space_key, page_title, file_path, page_content, filename, comment
+        )
+        return result
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Failed to upload file to page or create: {str(e)}",
+            'space_key': space_key,
+            'page_title': page_title,
+            'file_path': file_path
+        }
+
+
+@mcp.tool()
 def upload_file_to_content(
     content_id: str,
     file_path: str,
@@ -761,6 +865,154 @@ def upload_and_ingest_file_to_page_by_title(
             'success': False,
             'action': 'upload_and_ingest',
             'error': f"Failed to upload and ingest file: {str(e)}",
+            'space_key': space_key,
+            'page_title': page_title,
+            'file_path': file_path
+        }
+
+
+@mcp.tool()
+def create_page_and_upload_and_ingest_file(
+    space_key: str,
+    page_title: str,
+    file_path: str,
+    page_content: str = "",
+    filename: Optional[str] = None,
+    comment: Optional[str] = None,
+    company_name: Optional[str] = None,
+    cleanup_after_ingest: bool = True,
+    parent_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new page, upload a file to it, and ingest into vector database (complete workflow).
+    
+    Args:
+        space_key: Confluence space key (e.g., 'TEAM')
+        page_title: Title of the new page to create
+        file_path: Absolute path to the file to upload
+        page_content: HTML content for the new page (optional)
+        filename: Optional custom filename (defaults to original filename)
+        comment: Optional comment for the attachment
+        company_name: Company name for document metadata
+        cleanup_after_ingest: Whether to delete the local file after ingestion
+        parent_id: Optional parent page ID to create this page under
+    """
+    try:
+        utils = ConfluenceUtils()
+        
+        # Step 1: Create page and upload file
+        create_upload_result = utils.create_page_and_upload_file(
+            space_key, page_title, file_path, page_content, filename, comment, parent_id
+        )
+        
+        if not create_upload_result['success']:
+            return {
+                'success': False,
+                'action': 'create_page_upload_and_ingest',
+                'create_upload_result': create_upload_result,
+                'ingestion_result': None,
+                'error': f"Create/upload failed: {create_upload_result.get('error', 'Unknown error')}"
+            }
+        
+        # Step 2: Ingest into vector database (only for PDFs)
+        file_path_obj = Path(file_path)
+        if file_path_obj.suffix.lower() == '.pdf':
+            ingestion_result = _process_single_file_for_ingestion(
+                file_path, company_name, cleanup_after_ingest
+            )
+        else:
+            ingestion_result = {
+                'processed': 0,
+                'skipped': 1,
+                'message': 'File skipped for ingestion - only PDFs are supported'
+            }
+        
+        return {
+            'success': True,
+            'action': 'create_page_upload_and_ingest',
+            'create_upload_result': create_upload_result,
+            'ingestion_result': ingestion_result,
+            'summary': f"Created page '{page_title}', uploaded {file_path_obj.name}, and processed for search"
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'action': 'create_page_upload_and_ingest',
+            'error': f"Failed to create page, upload, and ingest: {str(e)}",
+            'space_key': space_key,
+            'page_title': page_title,
+            'file_path': file_path
+        }
+
+
+@mcp.tool()
+def upload_and_ingest_file_to_page_or_create(
+    space_key: str,
+    page_title: str,
+    file_path: str,
+    page_content: str = "",
+    filename: Optional[str] = None,
+    comment: Optional[str] = None,
+    company_name: Optional[str] = None,
+    cleanup_after_ingest: bool = True
+) -> Dict[str, Any]:
+    """
+    Upload and ingest file to page, creating the page if it doesn't exist (most flexible workflow).
+    
+    Args:
+        space_key: Confluence space key (e.g., 'TEAM')
+        page_title: Title of the page (will be created if doesn't exist)
+        file_path: Absolute path to the file to upload
+        page_content: HTML content for the page if it needs to be created
+        filename: Optional custom filename (defaults to original filename)
+        comment: Optional comment for the attachment
+        company_name: Company name for document metadata
+        cleanup_after_ingest: Whether to delete the local file after ingestion
+    """
+    try:
+        utils = ConfluenceUtils()
+        
+        # Step 1: Upload to page (create if needed)
+        upload_result = utils.upload_file_to_page_or_create(
+            space_key, page_title, file_path, page_content, filename, comment
+        )
+        
+        if not upload_result['success']:
+            return {
+                'success': False,
+                'action': 'upload_ingest_or_create',
+                'upload_result': upload_result,
+                'ingestion_result': None,
+                'error': f"Upload failed: {upload_result.get('error', 'Unknown error')}"
+            }
+        
+        # Step 2: Ingest into vector database (only for PDFs)
+        file_path_obj = Path(file_path)
+        if file_path_obj.suffix.lower() == '.pdf':
+            ingestion_result = _process_single_file_for_ingestion(
+                file_path, company_name, cleanup_after_ingest
+            )
+        else:
+            ingestion_result = {
+                'processed': 0,
+                'skipped': 1,
+                'message': 'File skipped for ingestion - only PDFs are supported'
+            }
+        
+        return {
+            'success': True,
+            'action': 'upload_ingest_or_create',
+            'upload_result': upload_result,
+            'ingestion_result': ingestion_result,
+            'summary': f"Uploaded {file_path_obj.name} to page '{page_title}' and processed for search"
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'action': 'upload_ingest_or_create',
+            'error': f"Failed to upload, ingest, or create: {str(e)}",
             'space_key': space_key,
             'page_title': page_title,
             'file_path': file_path

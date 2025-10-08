@@ -184,6 +184,29 @@ class ConfluenceClient:
             response.raise_for_status()
             return response.json()
     
+    def create_page(self, space_key: str, title: str, content: str = "", parent_id: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new page in Confluence."""
+        page_data = {
+            "type": "page",
+            "title": title,
+            "space": {
+                "key": space_key
+            },
+            "body": {
+                "storage": {
+                    "value": content if content else f"<p>This page was created for {title}</p>",
+                    "representation": "storage"
+                }
+            }
+        }
+        
+        if parent_id:
+            page_data["ancestors"] = [{"id": parent_id}]
+        
+        response = self._make_request('POST', 'rest/api/content', json=page_data)
+        response.raise_for_status()
+        return response.json()
+    
     def get_content_by_title(self, space_key: str, title: str, content_type: str = 'page') -> Optional[Dict[str, Any]]:
         """Get content by title within a space."""
         cql = f'space = "{space_key}" and title = "{title}" and type = "{content_type}"'
@@ -683,4 +706,133 @@ class ConfluenceUtils:
                 'space_key': space_key,
                 'page_title': page_title,
                 'file_path': str(file_path) if 'file_path' in locals() else None
+            }
+    
+    def create_page(self, space_key: str, title: str, content: str = "", parent_id: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new page in a Confluence space."""
+        try:
+            # Check if page already exists
+            existing_page = self.confluence_client.get_content_by_title(space_key, title, 'page')
+            if existing_page:
+                return {
+                    'success': False,
+                    'error': f'Page with title "{title}" already exists in space "{space_key}"',
+                    'existing_page': {
+                        'id': existing_page['id'],
+                        'title': existing_page['title'],
+                        'web_url': existing_page.get('_links', {}).get('webui', '')
+                    }
+                }
+            
+            # Validate space exists
+            try:
+                space_info = self.confluence_client.get_space(space_key)
+            except Exception:
+                return {
+                    'success': False,
+                    'error': f'Space "{space_key}" not found or not accessible'
+                }
+            
+            # Create the page
+            result = self.confluence_client.create_page(space_key, title, content, parent_id)
+            
+            return {
+                'success': True,
+                'page_created': True,
+                'page_id': result['id'],
+                'title': result['title'],
+                'space_key': space_key,
+                'web_url': result.get('_links', {}).get('webui', ''),
+                'content_length': len(content) if content else 0
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Failed to create page: {str(e)}',
+                'space_key': space_key,
+                'title': title
+            }
+    
+    def create_page_and_upload_file(self, space_key: str, page_title: str, file_path: str, 
+                                   page_content: str = "", filename: Optional[str] = None, 
+                                   comment: Optional[str] = None, parent_id: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new page and upload a file to it."""
+        try:
+            # Step 1: Create the page
+            create_result = self.create_page(space_key, page_title, page_content, parent_id)
+            
+            if not create_result['success']:
+                # If page already exists, try to upload to it
+                if 'already exists' in create_result.get('error', ''):
+                    existing_page = create_result.get('existing_page', {})
+                    page_id = existing_page.get('id')
+                    if page_id:
+                        print(f"📄 Page already exists, uploading to existing page: {page_title}")
+                        upload_result = self.upload_file_to_content(page_id, file_path, filename, comment)
+                        upload_result['page_created'] = False
+                        upload_result['page_already_existed'] = True
+                        return upload_result
+                
+                return create_result
+            
+            # Step 2: Upload file to the newly created page
+            page_id = create_result['page_id']
+            upload_result = self.upload_file_to_content(page_id, file_path, filename, comment)
+            
+            # Combine results
+            if upload_result['success']:
+                return {
+                    'success': True,
+                    'page_created': True,
+                    'page_id': page_id,
+                    'page_title': page_title,
+                    'space_key': space_key,
+                    'web_url': create_result.get('web_url', ''),
+                    'upload_result': upload_result,
+                    'summary': f'Created page "{page_title}" and uploaded {Path(file_path).name}'
+                }
+            else:
+                return {
+                    'success': False,
+                    'page_created': True,
+                    'page_id': page_id,
+                    'page_title': page_title,
+                    'error': f'Page created but upload failed: {upload_result.get("error", "Unknown error")}',
+                    'upload_result': upload_result
+                }
+                
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Failed to create page and upload file: {str(e)}',
+                'space_key': space_key,
+                'page_title': page_title,
+                'file_path': file_path
+            }
+    
+    def upload_file_to_page_or_create(self, space_key: str, page_title: str, file_path: str, 
+                                     page_content: str = "", filename: Optional[str] = None, 
+                                     comment: Optional[str] = None) -> Dict[str, Any]:
+        """Upload file to page, creating the page if it doesn't exist."""
+        try:
+            # First try to upload to existing page
+            upload_result = self.upload_file_to_page_by_title(space_key, page_title, file_path, filename, comment)
+            
+            # If page not found, create it and upload
+            if not upload_result['success'] and 'not found' in upload_result.get('error', '').lower():
+                print(f"📄 Page '{page_title}' not found, creating it...")
+                return self.create_page_and_upload_file(space_key, page_title, file_path, page_content, filename, comment)
+            
+            # If upload succeeded or failed for other reasons, return the result
+            upload_result['page_created'] = False
+            return upload_result
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Failed to upload file to page or create: {str(e)}',
+                'space_key': space_key,
+                'page_title': page_title,
+                'file_path': file_path
             }

@@ -451,6 +451,276 @@ def _process_issue_files_for_ingestion(issue_key: str, download_data: dict,
 
 
 @mcp.tool()
+def create_issue(
+    project_key: str,
+    summary: str,
+    issue_type: str = "Task",
+    description: str = "",
+    priority: str = "Medium",
+    assignee: Optional[str] = None,
+    parent_key: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new issue in a Jira project.
+    
+    Args:
+        project_key: Jira project key (e.g., 'PROJ')
+        summary: Issue summary/title
+        issue_type: Type of issue (Task, Bug, Story, etc.)
+        description: Detailed description of the issue
+        priority: Priority level (Low, Medium, High, Critical)
+        assignee: Account ID of the assignee (optional)
+        parent_key: Parent issue key for subtasks (optional)
+    """
+    try:
+        utils = JiraUtils()
+        result = utils.create_issue(project_key, summary, issue_type, description, priority, assignee, parent_key)
+        return result
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Failed to create issue '{summary}' in project '{project_key}': {str(e)}",
+            'project_key': project_key,
+            'summary': summary
+        }
+
+
+@mcp.tool()
+def create_issue_and_upload_file(
+    project_key: str,
+    summary: str,
+    file_path: str,
+    issue_type: str = "Task",
+    description: str = "",
+    priority: str = "Medium",
+    filename: Optional[str] = None,
+    assignee: Optional[str] = None,
+    parent_key: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new issue and upload a file to it in one operation.
+    
+    Args:
+        project_key: Jira project key (e.g., 'PROJ')
+        summary: Issue summary/title
+        file_path: Absolute path to the file to upload
+        issue_type: Type of issue (Task, Bug, Story, etc.)
+        description: Detailed description of the issue
+        priority: Priority level (Low, Medium, High, Critical)
+        filename: Optional custom filename (defaults to original filename)
+        assignee: Account ID of the assignee (optional)
+        parent_key: Parent issue key for subtasks (optional)
+    """
+    try:
+        utils = JiraUtils()
+        result = utils.create_issue_and_upload_file(
+            project_key, summary, file_path, issue_type, description, priority, filename, assignee, parent_key
+        )
+        return result
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Failed to create issue and upload file: {str(e)}",
+            'project_key': project_key,
+            'summary': summary,
+            'file_path': file_path
+        }
+
+
+@mcp.tool()
+def upload_file_to_issue_or_create(
+    project_key: str,
+    issue_key_or_summary: str,
+    file_path: str,
+    issue_type: str = "Task",
+    description: str = "",
+    priority: str = "Medium",
+    filename: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Upload a file to an issue, creating the issue if it doesn't exist.
+    This is the most flexible option for file uploads.
+    
+    Args:
+        project_key: Jira project key (e.g., 'PROJ')
+        issue_key_or_summary: Issue key (e.g., 'PROJ-123') or summary for new issue
+        file_path: Absolute path to the file to upload
+        issue_type: Type of issue if creating new (Task, Bug, Story, etc.)
+        description: Description for new issue
+        priority: Priority level if creating new (Low, Medium, High, Critical)
+        filename: Optional custom filename (defaults to original filename)
+    """
+    try:
+        utils = JiraUtils()
+        result = utils.upload_file_to_issue_or_create(
+            project_key, issue_key_or_summary, file_path, issue_type, description, priority, filename
+        )
+        return result
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Failed to upload file to issue or create: {str(e)}",
+            'project_key': project_key,
+            'issue_key_or_summary': issue_key_or_summary,
+            'file_path': file_path
+        }
+
+
+@mcp.tool()
+def create_issue_and_upload_and_ingest_file(
+    project_key: str,
+    summary: str,
+    file_path: str,
+    issue_type: str = "Task",
+    description: str = "",
+    priority: str = "Medium",
+    filename: Optional[str] = None,
+    company_name: Optional[str] = None,
+    cleanup_after_ingest: bool = True,
+    assignee: Optional[str] = None,
+    parent_key: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Create a new issue, upload a file to it, and ingest into vector database (complete workflow).
+    
+    Args:
+        project_key: Jira project key (e.g., 'PROJ')
+        summary: Issue summary/title
+        file_path: Absolute path to the file to upload
+        issue_type: Type of issue (Task, Bug, Story, etc.)
+        description: Detailed description of the issue
+        priority: Priority level (Low, Medium, High, Critical)
+        filename: Optional custom filename (defaults to original filename)
+        company_name: Company name for document metadata
+        cleanup_after_ingest: Whether to delete the local file after ingestion
+        assignee: Account ID of the assignee (optional)
+        parent_key: Parent issue key for subtasks (optional)
+    """
+    try:
+        utils = JiraUtils()
+        
+        # Step 1: Create issue and upload file
+        create_upload_result = utils.create_issue_and_upload_file(
+            project_key, summary, file_path, issue_type, description, priority, filename, assignee, parent_key
+        )
+        
+        if not create_upload_result['success']:
+            return {
+                'success': False,
+                'action': 'create_issue_upload_and_ingest',
+                'create_upload_result': create_upload_result,
+                'ingestion_result': None,
+                'error': f"Create/upload failed: {create_upload_result.get('error', 'Unknown error')}"
+            }
+        
+        # Step 2: Ingest into vector database (only for PDFs)
+        file_path_obj = Path(file_path)
+        if file_path_obj.suffix.lower() == '.pdf':
+            ingestion_result = _process_single_file_for_ingestion(
+                file_path, company_name, cleanup_after_ingest
+            )
+        else:
+            ingestion_result = {
+                'processed': 0,
+                'skipped': 1,
+                'message': 'File skipped for ingestion - only PDFs are supported'
+            }
+        
+        return {
+            'success': True,
+            'action': 'create_issue_upload_and_ingest',
+            'create_upload_result': create_upload_result,
+            'ingestion_result': ingestion_result,
+            'summary': f"Created issue '{summary}', uploaded {file_path_obj.name}, and processed for search"
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'action': 'create_issue_upload_and_ingest',
+            'error': f"Failed to create issue, upload, and ingest: {str(e)}",
+            'project_key': project_key,
+            'summary': summary,
+            'file_path': file_path
+        }
+
+
+@mcp.tool()
+def upload_and_ingest_file_to_issue_or_create(
+    project_key: str,
+    issue_key_or_summary: str,
+    file_path: str,
+    issue_type: str = "Task",
+    description: str = "",
+    priority: str = "Medium",
+    filename: Optional[str] = None,
+    company_name: Optional[str] = None,
+    cleanup_after_ingest: bool = True
+) -> Dict[str, Any]:
+    """
+    Upload and ingest file to issue, creating the issue if it doesn't exist (most flexible workflow).
+    
+    Args:
+        project_key: Jira project key (e.g., 'PROJ')
+        issue_key_or_summary: Issue key (e.g., 'PROJ-123') or summary for new issue
+        file_path: Absolute path to the file to upload
+        issue_type: Type of issue if creating new (Task, Bug, Story, etc.)
+        description: Description for new issue
+        priority: Priority level if creating new (Low, Medium, High, Critical)
+        filename: Optional custom filename (defaults to original filename)
+        company_name: Company name for document metadata
+        cleanup_after_ingest: Whether to delete the local file after ingestion
+    """
+    try:
+        utils = JiraUtils()
+        
+        # Step 1: Upload to issue (create if needed)
+        upload_result = utils.upload_file_to_issue_or_create(
+            project_key, issue_key_or_summary, file_path, issue_type, description, priority, filename
+        )
+        
+        if not upload_result['success']:
+            return {
+                'success': False,
+                'action': 'upload_ingest_or_create',
+                'upload_result': upload_result,
+                'ingestion_result': None,
+                'error': f"Upload failed: {upload_result.get('error', 'Unknown error')}"
+            }
+        
+        # Step 2: Ingest into vector database (only for PDFs)
+        file_path_obj = Path(file_path)
+        if file_path_obj.suffix.lower() == '.pdf':
+            ingestion_result = _process_single_file_for_ingestion(
+                file_path, company_name, cleanup_after_ingest
+            )
+        else:
+            ingestion_result = {
+                'processed': 0,
+                'skipped': 1,
+                'message': 'File skipped for ingestion - only PDFs are supported'
+            }
+        
+        return {
+            'success': True,
+            'action': 'upload_ingest_or_create',
+            'upload_result': upload_result,
+            'ingestion_result': ingestion_result,
+            'summary': f"Uploaded {file_path_obj.name} to issue '{issue_key_or_summary}' and processed for search"
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'action': 'upload_ingest_or_create',
+            'error': f"Failed to upload, ingest, or create: {str(e)}",
+            'project_key': project_key,
+            'issue_key_or_summary': issue_key_or_summary,
+            'file_path': file_path
+        }
+
+
+@mcp.tool()
 def upload_file_to_issue(
     issue_key: str,
     file_path: str,

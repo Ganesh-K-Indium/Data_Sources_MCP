@@ -134,12 +134,72 @@ class JiraClient:
             files = {'file': (filename, f, 'application/octet-stream')}
             
             response = requests.post(
-                f"{self.jira_url}rest/api/2/issue/{issue_key}/attachments",
+                f"{self.jira_url}rest/api/3/issue/{issue_key}/attachments",
                 headers=headers,
                 files=files
             )
             response.raise_for_status()
             return response.json()
+    
+    def create_issue(self, project_key: str, summary: str, issue_type: str = "Task", 
+                    description: str = "", priority: str = "Medium", assignee: Optional[str] = None,
+                    parent_key: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new issue in Jira."""
+        issue_data = {
+            "fields": {
+                "project": {
+                    "key": project_key
+                },
+                "summary": summary,
+                "description": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": description if description else f"Issue created for {summary}"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "issuetype": {
+                    "name": issue_type
+                }
+            }
+        }
+        
+        # Add priority if specified
+        if priority:
+            issue_data["fields"]["priority"] = {"name": priority}
+        
+        # Add assignee if specified
+        if assignee:
+            issue_data["fields"]["assignee"] = {"accountId": assignee}
+        
+        # Add parent if this should be a subtask
+        if parent_key:
+            issue_data["fields"]["parent"] = {"key": parent_key}
+            issue_data["fields"]["issuetype"] = {"name": "Subtask"}
+        
+        response = self._make_request('POST', 'rest/api/3/issue', json=issue_data)
+        response.raise_for_status()
+        return response.json()
+    
+    def get_issue_types(self, project_key: str) -> List[Dict[str, Any]]:
+        """Get available issue types for a project."""
+        response = self._make_request('GET', f'rest/api/3/project/{project_key}/issuetype')
+        response.raise_for_status()
+        return response.json()
+    
+    def get_priorities(self) -> List[Dict[str, Any]]:
+        """Get available priorities."""
+        response = self._make_request('GET', 'rest/api/3/priority')
+        response.raise_for_status()
+        return response.json()
 
 
 class JiraUtils:
@@ -505,3 +565,156 @@ class JiraUtils:
                 results['failed_uploads'] += 1
         
         return results
+    
+    def create_issue(self, project_key: str, summary: str, issue_type: str = "Task", 
+                    description: str = "", priority: str = "Medium", assignee: Optional[str] = None,
+                    parent_key: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new issue in a Jira project."""
+        try:
+            # Validate project exists
+            try:
+                project_info = self.jira_client.get_project(project_key)
+            except Exception:
+                return {
+                    'success': False,
+                    'error': f'Project "{project_key}" not found or not accessible'
+                }
+            
+            # Check if issue with same summary already exists
+            filter_obj = self.create_issue_filter(project_key=project_key, text_search=summary)
+            jql = self.build_jql_from_filter(filter_obj)
+            existing_issues = self.jira_client.search_issues(jql=jql, max_results=5)
+            
+            for issue in existing_issues.get('issues', []):
+                if issue.get('fields', {}).get('summary', '').strip().lower() == summary.strip().lower():
+                    return {
+                        'success': False,
+                        'error': f'Issue with summary "{summary}" already exists',
+                        'existing_issue': {
+                            'key': issue['key'],
+                            'summary': issue.get('fields', {}).get('summary', ''),
+                            'status': issue.get('fields', {}).get('status', {}).get('name', ''),
+                            'web_url': f"{self.jira_client.jira_url}browse/{issue['key']}"
+                        }
+                    }
+            
+            # Create the issue
+            result = self.jira_client.create_issue(
+                project_key, summary, issue_type, description, priority, assignee, parent_key
+            )
+            
+            return {
+                'success': True,
+                'issue_created': True,
+                'issue_key': result['key'],
+                'issue_id': result['id'],
+                'summary': summary,
+                'project_key': project_key,
+                'issue_type': issue_type,
+                'priority': priority,
+                'web_url': f"{self.jira_client.jira_url}browse/{result['key']}"
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Failed to create issue: {str(e)}',
+                'project_key': project_key,
+                'summary': summary
+            }
+    
+    def create_issue_and_upload_file(self, project_key: str, summary: str, file_path: str, 
+                                   issue_type: str = "Task", description: str = "", 
+                                   priority: str = "Medium", filename: Optional[str] = None,
+                                   assignee: Optional[str] = None, parent_key: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new issue and upload a file to it."""
+        try:
+            # Step 1: Create the issue
+            create_result = self.create_issue(project_key, summary, issue_type, description, priority, assignee, parent_key)
+            
+            if not create_result['success']:
+                # If issue already exists, try to upload to it
+                if 'already exists' in create_result.get('error', ''):
+                    existing_issue = create_result.get('existing_issue', {})
+                    issue_key = existing_issue.get('key')
+                    if issue_key:
+                        print(f"📋 Issue already exists, uploading to existing issue: {issue_key}")
+                        upload_result = self.upload_file_to_issue(issue_key, file_path, filename)
+                        upload_result['issue_created'] = False
+                        upload_result['issue_already_existed'] = True
+                        return upload_result
+                
+                return create_result
+            
+            # Step 2: Upload file to the newly created issue
+            issue_key = create_result['issue_key']
+            upload_result = self.upload_file_to_issue(issue_key, file_path, filename)
+            
+            # Combine results
+            if upload_result['success']:
+                return {
+                    'success': True,
+                    'issue_created': True,
+                    'issue_key': issue_key,
+                    'summary': summary,
+                    'project_key': project_key,
+                    'web_url': create_result.get('web_url', ''),
+                    'upload_result': upload_result,
+                    'summary_text': f'Created issue "{summary}" and uploaded {Path(file_path).name}'
+                }
+            else:
+                return {
+                    'success': False,
+                    'issue_created': True,
+                    'issue_key': issue_key,
+                    'summary': summary,
+                    'error': f'Issue created but upload failed: {upload_result.get("error", "Unknown error")}',
+                    'upload_result': upload_result
+                }
+                
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Failed to create issue and upload file: {str(e)}',
+                'project_key': project_key,
+                'summary': summary,
+                'file_path': file_path
+            }
+    
+    def upload_file_to_issue_or_create(self, project_key: str, issue_key_or_summary: str, file_path: str, 
+                                      issue_type: str = "Task", description: str = "", 
+                                      priority: str = "Medium", filename: Optional[str] = None) -> Dict[str, Any]:
+        """Upload file to issue, creating the issue if it doesn't exist."""
+        try:
+            # First try to treat it as an issue key and upload
+            try:
+                # Check if it looks like an issue key (PROJECT-123 format)
+                if '-' in issue_key_or_summary and len(issue_key_or_summary.split('-')) == 2:
+                    project_part, number_part = issue_key_or_summary.split('-')
+                    if number_part.isdigit():
+                        # Looks like an issue key, try to upload
+                        upload_result = self.upload_file_to_issue(issue_key_or_summary, file_path, filename)
+                        if upload_result['success']:
+                            upload_result['issue_created'] = False
+                            return upload_result
+                        elif 'not found' not in upload_result.get('error', '').lower():
+                            # If error is not about issue not found, return the error
+                            return upload_result
+            except Exception:
+                pass
+            
+            # If we get here, either it's not an issue key or the issue doesn't exist
+            # Treat it as a summary and create new issue
+            print(f"📋 Issue '{issue_key_or_summary}' not found, creating it...")
+            return self.create_issue_and_upload_file(
+                project_key, issue_key_or_summary, file_path, issue_type, description, priority, filename
+            )
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Failed to upload file to issue or create: {str(e)}',
+                'project_key': project_key,
+                'issue_key_or_summary': issue_key_or_summary,
+                'file_path': file_path
+            }
