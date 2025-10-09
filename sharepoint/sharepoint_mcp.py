@@ -136,6 +136,7 @@ def list_sharepoint_files(
                     "name": f.get('name'),
                     "size": f.get('size'),
                     "modified": f.get('lastModifiedDateTime') or f.get('modified'),
+                    'webUrl': f.get('webUrl'),
                     "type": "folder" if f.get('folder') else "file"
                 }
                 for f in files
