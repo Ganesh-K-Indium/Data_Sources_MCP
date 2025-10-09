@@ -263,6 +263,11 @@ class ConfluenceUtils:
     
     def process_content_details(self, content: Dict[str, Any]) -> Dict[str, Any]:
         """Process and enhance content details."""
+        # Construct full web URL
+        web_url = content.get('_links', {}).get('webui')
+        if web_url and not web_url.startswith('http'):
+            web_url = urljoin(self.confluence_client.confluence_url, web_url.lstrip('/'))
+        
         return {
             'id': content.get('id'),
             'title': content.get('title', ''),
@@ -280,7 +285,7 @@ class ConfluenceUtils:
             'created_date': content.get('history', {}).get('createdDate'),
             'created_by': content.get('history', {}).get('createdBy', {}).get('displayName'),
             'last_updated': content.get('version', {}).get('when'),
-            'web_url': content.get('_links', {}).get('webui'),
+            'web_url': web_url,
             'body_content': self._extract_body_content(content),
             'attachments_info': self._get_content_attachments_info(content.get('id')),
             'raw_content': content
@@ -316,6 +321,16 @@ class ConfluenceUtils:
         extensions = attachment.get('extensions', {})
         file_size = extensions.get('fileSize', 0)
         
+        # Construct full URLs
+        download_url = attachment.get('_links', {}).get('download', '')
+        web_url = attachment.get('_links', {}).get('webui', '')
+        
+        # Convert relative URLs to full URLs
+        if download_url and not download_url.startswith('http'):
+            download_url = urljoin(self.confluence_client.confluence_url, download_url.lstrip('/'))
+        if web_url and not web_url.startswith('http'):
+            web_url = urljoin(self.confluence_client.confluence_url, web_url.lstrip('/'))
+        
         return {
             'id': attachment.get('id'),
             'title': title,
@@ -325,8 +340,8 @@ class ConfluenceUtils:
             'media_type': extensions.get('mediaType', ''),
             'created_date': attachment.get('version', {}).get('when', ''),
             'created_by': attachment.get('version', {}).get('by', {}).get('displayName', ''),
-            'download_url': attachment.get('_links', {}).get('download', ''),
-            'web_url': attachment.get('_links', {}).get('webui', '')
+            'download_url': download_url,
+            'web_url': web_url
         }
     
     def _format_file_size(self, size_bytes: int) -> str:
@@ -714,13 +729,18 @@ class ConfluenceUtils:
             # Check if page already exists
             existing_page = self.confluence_client.get_content_by_title(space_key, title, 'page')
             if existing_page:
+                # Construct full web URL for existing page
+                existing_web_url = existing_page.get('_links', {}).get('webui', '')
+                if existing_web_url and not existing_web_url.startswith('http'):
+                    existing_web_url = urljoin(self.confluence_client.confluence_url, existing_web_url.lstrip('/'))
+                
                 return {
                     'success': False,
                     'error': f'Page with title "{title}" already exists in space "{space_key}"',
                     'existing_page': {
                         'id': existing_page['id'],
                         'title': existing_page['title'],
-                        'web_url': existing_page.get('_links', {}).get('webui', '')
+                        'web_url': existing_web_url
                     }
                 }
             
@@ -736,13 +756,18 @@ class ConfluenceUtils:
             # Create the page
             result = self.confluence_client.create_page(space_key, title, content, parent_id)
             
+            # Construct full web URL
+            created_web_url = result.get('_links', {}).get('webui', '')
+            if created_web_url and not created_web_url.startswith('http'):
+                created_web_url = urljoin(self.confluence_client.confluence_url, created_web_url.lstrip('/'))
+            
             return {
                 'success': True,
                 'page_created': True,
                 'page_id': result['id'],
                 'title': result['title'],
                 'space_key': space_key,
-                'web_url': result.get('_links', {}).get('webui', ''),
+                'web_url': created_web_url,
                 'content_length': len(content) if content else 0
             }
             
