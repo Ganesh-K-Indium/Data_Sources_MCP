@@ -19,6 +19,7 @@ from confluence_mcp.confluence_agent import create_confluence_agent
 from jira_mcp.jira_agent import create_jira_agent
 from sharepoint.sharepoint_agent import create_sharepoint_agent
 from local_pdf.local_pdf_agent import create_local_pdf_agent
+from gdrive.gdrive_agent import create_gdrive_agent
 import os
 from datetime import datetime
 import json
@@ -63,6 +64,7 @@ async def main():
     await wait_for_server("http://localhost:8001/mcp")  # Confluence
     await wait_for_server("http://localhost:8002/mcp")  # SharePoint
     await wait_for_server("http://localhost:8003/mcp")  # Local PDF
+    await wait_for_server("http://localhost:8005/mcp")  # Google Drive
     
     # Create sub-agents
     print("🔧 Creating sub-agents...")
@@ -70,15 +72,16 @@ async def main():
     jira_agent = await create_jira_agent()
     sharepoint_agent = await create_sharepoint_agent()  
     local_pdf_agent = await create_local_pdf_agent()
+    gdrive_agent = await create_gdrive_agent()
     
     print("✅ Sub-agents created successfully")
     
     # Create supervisor
     supervisor = create_supervisor(
         model=ChatOpenAI(temperature=0, model_name="gpt-4.1"),
-        agents=[jira_agent, confluence_agent,sharepoint_agent, local_pdf_agent],
+        agents=[jira_agent, confluence_agent, sharepoint_agent, local_pdf_agent, gdrive_agent],
         prompt=(
-            "You are a supervisor managing four specialized data source agents:\n\n"
+            "You are a supervisor managing five specialized data source agents:\n\n"
             "- **confluence_agent**: Expert in Confluence operations including page creation, content search, "
             "document uploads, space management, and knowledge base operations. Assign tasks related to "
             "Confluence spaces, pages, content creation, document management, and wiki operations.\n\n"
@@ -91,15 +94,19 @@ async def main():
             "- **local_pdf_agent**: Expert in local PDF operations including file management, content extraction, "
             "document ingestion into vector databases, and search across ingested PDFs. Assign tasks related to "
             "local PDF files, document organization, vector database integration, and PDF content processing.\n\n"
+            "- **gdrive_agent**: Expert in Google Drive operations including file downloads, folder management, "
+            "content search, document organization, and document ingestion into vector databases. Assign tasks "
+            "related to Google Drive files, folder creation, file retrieval, bulk downloads, and RAG pipeline ingestion.\n\n"
             "🎯 TASK ROUTING GUIDELINES:\n"
             "- For wiki/documentation/knowledge base tasks → confluence_agent\n"
             "- For issue tracking/project management/tickets → jira_agent\n"
             "- For document uploads/downloads and file management from SharePoint → sharepoint_agent\n"
             "- For local PDF file operations, ingestion, and search → local_pdf_agent\n"
+            "- For Google Drive file operations, downloads, and folder management → gdrive_agent\n"
             "- For document uploads: route based on destination (Confluence pages vs Jira issues vs SharePoint libraries)\n"
-            "- For searches: route based on system (Confluence content vs Jira issues vs SharePoint files vs local PDFs)\n"
-            "- For statistics: route based on system (space stats vs project stats vs library stats)\n"
-            "- For vector database ingestion: Jira related files → jira_agent, Confluence related files → confluence_agent, SharePoint files → sharepoint_agent, local PDFs → local_pdf_agent\n\n"
+            "- For searches: route based on system (Confluence content vs Jira issues vs SharePoint files vs local PDFs vs Google Drive)\n"
+            "- For statistics: route based on system (space stats vs project stats vs library stats vs drive stats)\n"
+            "- For vector database ingestion: Jira related files → jira_agent, Confluence related files → confluence_agent, SharePoint files → sharepoint_agent, local PDFs → local_pdf_agent, Google Drive files → gdrive_agent\n\n"
             "Assign work to one agent at a time, do not call agents in parallel.\n"
             "Do not do any work yourself - always delegate to the appropriate specialist agent.\n"
             "Provide clear context about why you're routing to a specific agent."
@@ -140,9 +147,17 @@ async def main():
     print("  • Search across ingested PDF documents")
     print("  • Copy, move, and organize PDF files")
     
+    print("\n☁️ GOOGLE DRIVE OPERATIONS:")
+    print("  • List files and folders from Google Drive")
+    print("  • Download files and documents from Google Drive")
+    print("  • Search files by name, content, and metadata")
+    print("  • Create folders and organize file structure")
+    print("  • Ingest Drive documents into vector databases for RAG")
+    print("  • Bulk download operations and file management")
+    
     print("\n🤖 INTELLIGENT ROUTING:")
     print("  • I automatically route your requests to the right specialist")
-    print("  • Support for complex workflows across all four systems")
+    print("  • Support for complex workflows across all five systems")
     
     
     print("\nEnter your command (or 'quit' to exit): ")

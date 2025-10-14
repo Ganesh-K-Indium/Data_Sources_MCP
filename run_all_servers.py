@@ -32,6 +32,12 @@ SERVERS = [
         "url": "http://localhost:8002/mcp"
     },
     {
+        "name": "Google Drive MCP Server",
+        "script": "gdrive/gdrive_mcp.py",
+        "port": 8005,
+        "url": "http://localhost:8005/mcp"
+    },
+    {
         "name": "Local PDF MCP Server",
         "script": "local_pdf/local_pdf_mcp.py",
         "port": 8003,
