@@ -1,53 +1,53 @@
 # Core
-python-dotenv
-pydantic
-typing_extensions
+python-dotenv==1.1.1
+pydantic==2.11.10
+typing_extensions==4.15.0
 
 # API
-fastapi
-uvicorn
+fastapi==0.118.0
+uvicorn==0.37.0
 
 # LangChain & Graph
-langchain
-langchain-core
-langchain-community
-langchain-openai
-langchain-mcp-adapters
-langgraph
-langchain_tavily
-langchain-groq
-tavily-python
-langchain-qdrant
+langchain==0.3.27
+langchain-core==0.3.78
+langchain-community==0.3.30
+langchain-openai==0.3.35
+langchain-mcp-adapters==0.1.11
+langgraph==0.6.8
+langchain_tavily==0.2.12
+langchain-groq==0.3.8
+langgraph-supervisor==0.0.29
+tavily-python==0.7.12
+langchain-qdrant==0.2.1
+
 # Vector DB
-faiss-cpu
+faiss-cpu==1.12.0
 
 # PDF & Images
-pymupdf   # fitz
-pillow
+pymupdf==1.26.4
+pillow==11.3.0
+PyPDF2==3.0.1
 
 # OpenAI client
-openai
+openai==2.2.0
 
 # Utilities
-requests
+requests==2.32.5
+python-multipart==0.0.20
+qdrant-client==1.15.1
+llama_parse==0.6.73
 
+# Google APIs
+google-api-python-client==2.184.0
+google-auth==2.41.1
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.2
 
-python-multipart
+# MCP
+fastmcp==2.12.4
 
+# UI
+streamlit==1.50.0
 
-qdrant-client
-
-llama_parse
-
-
-google-api-python-client 
-google-auth 
-google-auth-httplib2 
-google-auth-oauthlib
-
-
-fastmcp
-
-streamlit
-
-pathlib>=1.0.1
+# Path utilities
+pathlib==1.0.1
