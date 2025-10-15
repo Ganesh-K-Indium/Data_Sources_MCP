@@ -163,8 +163,8 @@ class SharePointClient:
                     "name": item.get("name"),
                     "size": item.get("size"),
                     "modified": item.get("lastModifiedDateTime"),
-                    "downloadUrl": item.get("@microsoft.graph.downloadUrl"),
                     "webUrl": item.get("webUrl"),
+                    "downloadUrl": item.get("@microsoft.graph.downloadUrl"),
                     "id": item.get("id")
                 })
         

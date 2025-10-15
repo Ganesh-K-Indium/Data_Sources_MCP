@@ -156,7 +156,7 @@ def list_sharepoint_files(
 @mcp.tool()
 def download_sharepoint_file(
     file_name: str,
-    destination_path: str,
+    destination_path: Optional[str] = None,
     library_name: str = "Documents",
     folder_path: Optional[str] = None,
     site_url: Optional[str] = None
@@ -166,7 +166,7 @@ def download_sharepoint_file(
     
     Args:
         file_name: Name of the file to download
-        destination_path: Local directory or full file path to save the file
+        destination_path: Local directory or full file path to save the file (default: "./data_sources_mcp")
         library_name: Document library name (default: "Documents")
         folder_path: Folder path within library (optional)
         site_url: SharePoint site URL (optional in single-site mode)
@@ -175,10 +175,13 @@ def download_sharepoint_file(
         JSON string with download status and file info
     
     Example:
-        # Single-site mode - directory path
+        # Use default path (data_sources_mcp folder)
+        download_sharepoint_file("TESLA.pdf")
+        
+        # Custom directory path
         download_sharepoint_file("report.pdf", "./downloads")
         
-        # Single-site mode - full file path
+        # Full file path
         download_sharepoint_file("report.pdf", "./downloads/report.pdf")
         
         # Multi-site mode
@@ -190,9 +193,14 @@ def download_sharepoint_file(
     """
     try:
         from sharepoint.utils import download_specific_sharepoint_file
+        import shutil
+        
+        # Set default destination if not provided
+        if destination_path is None:
+            destination_path = "./data_sources_mcp"
         
         # Determine if destination_path is a directory or full file path
-        if os.path.isdir(destination_path):
+        if destination_path.endswith('/') or os.path.isdir(destination_path) or not os.path.splitext(destination_path)[1]:
             # It's a directory - use it as local_folder
             local_folder = destination_path
             final_path = os.path.join(destination_path, file_name)
@@ -211,14 +219,17 @@ def download_sharepoint_file(
         if local_path:
             # Rename/move if needed
             if local_path != final_path:
-                import shutil
                 os.makedirs(os.path.dirname(final_path) or ".", exist_ok=True)
                 shutil.move(local_path, final_path)
+                final_path = final_path
+            else:
+                final_path = local_path
             
             return json.dumps({
                 "success": True,
                 "message": f"File downloaded successfully: {file_name}",
-                "path": final_path
+                "path": os.path.abspath(final_path),
+                "file_name": file_name
             }, indent=2)
         else:
             return json.dumps({
@@ -226,22 +237,12 @@ def download_sharepoint_file(
                 "error": f"Failed to download: {file_name}"
             })
             
-            if success:
-                return json.dumps({
-                    "success": True,
-                    "message": f"File downloaded successfully: {file_name}",
-                    "path": destination_path,
-                    "file_info": file_info
-                }, indent=2)
-            else:
-                return json.dumps({
-                    "success": False,
-                    "error": "Download failed"
-                })
     except Exception as e:
+        import traceback
         return json.dumps({
             "success": False,
-            "error": str(e)
+            "error": f"Download error: {str(e)}",
+            "traceback": traceback.format_exc()
         })
 
 
