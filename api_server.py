@@ -20,9 +20,11 @@ from main_agent import (
     create_jira_agent,
     create_sharepoint_agent,
     create_local_pdf_agent,
+    create_gdrive_agent,
     create_supervisor
+    
 )
-from gdrive.gdrive_agent import create_gdrive_agent
+
 from langchain_openai import ChatOpenAI
 
 # Pydantic models for API requests/responses
