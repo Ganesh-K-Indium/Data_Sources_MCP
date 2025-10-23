@@ -39,7 +39,7 @@ async def wait_for_server(url: str, timeout: int = 10):
     raise TimeoutError(f"MCP server at {url} did not respond within {timeout} seconds")
 
 
-async def create_gdrive_agent():
+async def create_gdrive_agent(checkpointer=None):
     """Create the Google Drive sub-agent with all MCP tools."""
     system_prompt = """
     You are a specialized Google Drive Operations Agent with comprehensive access to Google Drive data and document management capabilities.
@@ -109,7 +109,8 @@ async def create_gdrive_agent():
         model=model,
         tools=tools,
         name="gdrive_agent",
-        prompt=system_prompt
+        prompt=system_prompt,
+        checkpointer=checkpointer
     )
     
     # Attach the session and client to the agent to keep them alive

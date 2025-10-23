@@ -42,7 +42,7 @@ async def wait_for_server(url: str, timeout: int = 10):
     raise TimeoutError(f"Local PDF MCP server at {url} did not respond within {timeout} seconds")
 
 
-async def create_local_pdf_agent():
+async def create_local_pdf_agent(checkpointer=None):
     """Create the Local PDF sub-agent with all MCP tools."""
     system_prompt = """
     You are a specialized Local PDF Operations Agent with comprehensive access to local PDF file management and document operations.
@@ -114,7 +114,8 @@ async def create_local_pdf_agent():
         model=model,
         tools=tools,
         name="local_pdf_agent",
-        prompt=system_prompt
+        prompt=system_prompt,
+        checkpointer=checkpointer
     )
     
     # Attach the session and client to the agent to keep them alive

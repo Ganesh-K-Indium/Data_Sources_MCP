@@ -37,7 +37,7 @@ async def wait_for_server(url: str, timeout: int = 10):
         await asyncio.sleep(1)
     raise TimeoutError(f"MCP server at {url} did not respond within {timeout} seconds")
 
-async def create_jira_agent():
+async def create_jira_agent(checkpointer=None):
     """Create the Jira sub-agent with all MCP tools."""
     system_prompt = """
     You are a specialized Jira Operations Agent with comprehensive access to Jira data and document management capabilities.
@@ -101,7 +101,8 @@ async def create_jira_agent():
         model=model,
         tools=tools,
         name="jira_agent",
-        prompt=system_prompt
+        prompt=system_prompt,
+        checkpointer=checkpointer
     )
     
     # Attach the session and client to the agent to keep them alive

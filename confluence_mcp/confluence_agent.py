@@ -39,7 +39,7 @@ async def wait_for_server(url: str, timeout: int = 10):
     raise TimeoutError(f"MCP server at {url} did not respond within {timeout} seconds")
 
 
-async def create_confluence_agent():
+async def create_confluence_agent(checkpointer=None):
     """Create the Confluence sub-agent with all MCP tools."""
     system_prompt = """
     You are a specialized Confluence Operations Agent with comprehensive access to Confluence data and document management capabilities.
@@ -104,7 +104,8 @@ async def create_confluence_agent():
         model=model,
         tools=tools,
         name="confluence_agent",
-        prompt=system_prompt
+        prompt=system_prompt,
+        checkpointer=checkpointer
     )
     
     # Attach the session and client to the agent to keep them alive
