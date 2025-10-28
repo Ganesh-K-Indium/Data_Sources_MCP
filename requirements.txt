@@ -19,6 +19,7 @@ langchain-groq==0.3.8
 langgraph-supervisor==0.0.29
 tavily-python==0.7.12
 langchain-qdrant==0.2.1
+langgraph-checkpoint-postgres
 
 # Vector DB
 faiss-cpu==1.12.0
@@ -27,6 +28,15 @@ faiss-cpu==1.12.0
 pymupdf==1.26.4
 pillow==11.3.0
 PyPDF2==3.0.1
+
+# Analysis & Table Extraction
+beautifulsoup4==4.12.3
+unstructured-client
+openpyxl==3.1.5
+pandas==2.2.3
+matplotlib==3.9.3
+reportlab==4.2.5
+seaborn==0.13.2
 
 # OpenAI client
 openai==2.2.0
@@ -51,3 +61,5 @@ streamlit==1.50.0
 
 # Path utilities
 pathlib==1.0.1
+
+psycopg2-binary

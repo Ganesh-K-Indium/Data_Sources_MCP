@@ -43,6 +43,12 @@ SERVERS = [
         "port": 8003,
         "url": "http://localhost:8003/mcp"
     },
+    # {
+    #     "name": "Analysis MCP Server",
+    #     "script": "analysis_mcp/analysis_mcp.py",
+    #     "port": 8007,
+    #     "url": "http://localhost:8007/mcp"
+    # },
     {
         "name": "API Server",
         "script": "api_server.py",
