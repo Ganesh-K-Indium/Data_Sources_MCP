@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def create_qdrant_collection(collection_name: str, qdrant_url: str = "http://localhost:6333"):
+def create_qdrant_collection(collection_name: str, qdrant_url: str = "http://13.222.189.75/"):
     # Initialize embeddings
-    embeddings = OpenAIEmbeddings()
+    #embeddings = OpenAIEmbeddings()
     
     # Detect embedding dimension dynamically
-    dummy_vector = embeddings.embed_query("Hello world")
-    embedding_dim = len(dummy_vector)
+    #dummy_vector = embeddings.embed_query("Hello world")
+    embedding_dim = 1536
     print(f"Detected embedding dimension: {embedding_dim}")
     
     # Connect to Qdrant

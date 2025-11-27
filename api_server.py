@@ -181,11 +181,27 @@ async def root():
 
 @app.get("/health", response_model=StatusResponse, tags=["Health"])
 async def health_check():
-    """Check the health status of the API and all MCP servers"""
+    """
+    Comprehensive health check for the API and all MCP servers.
+    
+    Checks:
+    - All 5 MCP servers are responding
+    - Agents are initialized
+    - Database connectivity (PostgreSQL)
+    - Supervisor agent is ready
+    
+    Returns:
+    - status: "healthy" or "unhealthy"
+    - servers_ready: Status of each MCP server
+    - agents_ready: Whether supervisor and sub-agents are initialized
+    - database_ready: Database connectivity status
+    - timestamp: ISO formatted timestamp
+    """
     import socket
     from urllib.parse import urlparse
 
     def check_server(url):
+        """Check if a server is responding on its port"""
         try:
             parsed = urlparse(url)
             host = parsed.hostname or 'localhost'
@@ -195,9 +211,41 @@ async def health_check():
             result = sock.connect_ex((host, port))
             sock.close()
             return result == 0
-        except:
+        except Exception as e:
+            print(f"❌ Server check failed for {url}: {str(e)}")
             return False
 
+    def check_database():
+        """Check PostgreSQL database connectivity"""
+        try:
+            connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
+            if not connection_string:
+                return False
+            
+            # Try to create a connection
+            import asyncpg
+            import asyncio
+            
+            async def test_connection():
+                try:
+                    conn = await asyncpg.connect(connection_string)
+                    await conn.execute('SELECT 1')
+                    await conn.close()
+                    return True
+                except Exception as e:
+                    print(f"❌ Database check failed: {str(e)}")
+                    return False
+            
+            # Run async test
+            loop = asyncio.new_event_loop()
+            result = loop.run_until_complete(test_connection())
+            loop.close()
+            return result
+        except Exception as e:
+            print(f"❌ Database check error: {str(e)}")
+            return False
+
+    # Check all MCP servers
     servers_status = {
         "jira": check_server("http://localhost:8000/mcp"),
         "confluence": check_server("http://localhost:8001/mcp"),
@@ -206,16 +254,28 @@ async def health_check():
         "gdrive": check_server("http://localhost:8005/mcp")
     }
 
+    # Check database
+    database_ready = check_database()
+
+    # Determine overall health
     all_servers_ready = all(servers_status.values())
+    overall_healthy = all_servers_ready and agents_initialized and database_ready and supervisor is not None
 
-    status = "healthy" if (all_servers_ready and agents_initialized) else "unhealthy"
+    status = "healthy" if overall_healthy else "unhealthy"
 
-    return StatusResponse(
-        status=status,
-        servers_ready=servers_status,
-        agents_ready=agents_initialized,
-        timestamp=datetime.now().isoformat()
-    )
+    # Enhanced status response
+    response_data = {
+        "status": status,
+        "servers_ready": servers_status,
+        "agents_ready": agents_initialized,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Add database status if available
+    if hasattr(StatusResponse, 'database_ready'):
+        response_data["database_ready"] = database_ready
+
+    return StatusResponse(**response_data)
 
 @app.post("/chat", response_model=ChatResponse, tags=["Chat"])
 async def chat_with_agent(request: ChatRequest, background_tasks: BackgroundTasks):
