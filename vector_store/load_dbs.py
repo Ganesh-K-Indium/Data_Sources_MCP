@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain_qdrant import QdrantVectorStore  # Updated LangChain Qdrant integration
 from qdrant_client import QdrantClient
+import os
 
 load_dotenv()
 
@@ -17,7 +18,8 @@ class load_vector_database():
         self.image_vector_db_path = "multimodel_vector_db"  # collection name
         self.text_vector_db_path = "10K_vector_db"          # collection name
         self.embeddings = OpenAIEmbeddings()
-        self.qdrant_client = QdrantClient(url="http://localhost:6333")
+        self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+        self.qdrant_client = QdrantClient(url=self.qdrant_url)
     
     def get_image_retriever(self):
         image_vectorstore_10k = QdrantVectorStore(
