@@ -20,6 +20,7 @@ langgraph-supervisor
 tavily-python
 langchain-qdrant
 langgraph-checkpoint-postgres
+langgraph-checkpoint-sqlite
 
 # Vector DB
 faiss-cpu

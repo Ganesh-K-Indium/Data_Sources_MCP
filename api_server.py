@@ -25,7 +25,7 @@ from main_agent import (
 
 from langchain_openai import ChatOpenAI
 from langgraph_supervisor import create_supervisor
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langchain_core.messages import HumanMessage
 
 # Pydantic models for API requests/responses
@@ -78,9 +78,9 @@ async def initialize_agents():
         print("🚀 Initializing Data Sources MCP Supervisor Agent...")
         
         # Initialize memory saver
-        print("💾 Initializing PostgreSQL memory...")
-        connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
-        saver_cm = AsyncPostgresSaver.from_conn_string(connection_string)
+        print("💾 Initializing SQLite memory...")
+        connection_string = os.getenv("SQLITE_CONNECTION_STRING", "sqlite:///checkpoint.db")
+        saver_cm = AsyncSqliteSaver.from_conn_string(connection_string)
         saver = await saver_cm.__aenter__()
         await saver.setup()  # Creates tables if needed
         print("✅ Memory initialized successfully")
@@ -187,7 +187,7 @@ async def health_check():
     Checks:
     - All 5 MCP servers are responding
     - Agents are initialized
-    - Database connectivity (PostgreSQL)
+    - Database connectivity (SQLite)
     - Supervisor agent is ready
     
     Returns:
@@ -215,31 +215,37 @@ async def health_check():
             print(f"❌ Server check failed for {url}: {str(e)}")
             return False
 
-    def check_database():
-        """Check PostgreSQL database connectivity"""
+    async def check_database():
+        """Check SQLite database connectivity"""
         try:
-            connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
+            connection_string = os.getenv("SQLITE_CONNECTION_STRING", "sqlite:///checkpoint.db")
             if not connection_string:
                 return False
             
+            # For SQLite, extract the file path from the connection string
+            if connection_string.startswith("sqlite:///"):
+                db_path = connection_string[10:]  # Remove 'sqlite:///'
+            else:
+                db_path = connection_string
+            
             # Try to create a connection
-            import asyncpg
+            import sqlite3
             import asyncio
             
-            async def test_connection():
+            def test_connection():
                 try:
-                    conn = await asyncpg.connect(connection_string)
-                    await conn.execute('SELECT 1')
-                    await conn.close()
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT 1')
+                    cursor.fetchone()
+                    conn.close()
                     return True
                 except Exception as e:
                     print(f"❌ Database check failed: {str(e)}")
                     return False
             
-            # Run async test
-            loop = asyncio.new_event_loop()
-            result = loop.run_until_complete(test_connection())
-            loop.close()
+            # Run sync test in thread
+            result = await asyncio.to_thread(test_connection)
             return result
         except Exception as e:
             print(f"❌ Database check error: {str(e)}")
@@ -255,7 +261,7 @@ async def health_check():
     }
 
     # Check database
-    database_ready = check_database()
+    database_ready = await check_database()
 
     # Determine overall health
     all_servers_ready = all(servers_status.values())

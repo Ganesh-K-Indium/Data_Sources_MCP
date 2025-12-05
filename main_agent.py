@@ -21,7 +21,7 @@ from jira_mcp.jira_agent import create_jira_agent
 from sharepoint.sharepoint_agent import create_sharepoint_agent
 from local_pdf.local_pdf_agent import create_local_pdf_agent
 from gdrive.gdrive_agent import create_gdrive_agent
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 import os
 from datetime import datetime
 import json
@@ -61,10 +61,10 @@ async def main():
     print("=" * 80)
     
     # Initialize memory saver
-    print("💾 Initializing PostgreSQL memory...")
-    connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
+    print("💾 Initializing SQLite memory...")
+    connection_string = os.getenv("SQLITE_CONNECTION_STRING", "sqlite:///checkpoint.db")
     
-    async with AsyncPostgresSaver.from_conn_string(connection_string) as saver:
+    async with AsyncSqliteSaver.from_conn_string(connection_string) as saver:
         await saver.setup()  # Creates tables if needed
         print("✅ Memory initialized successfully")
         
