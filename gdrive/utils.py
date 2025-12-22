@@ -20,26 +20,36 @@ class GoogleDriveClient:
     
     def __init__(self):
         """Initialize Google Drive client with service account credentials"""
-        self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
-        
-        if not os.path.exists(self.credentials_path):
-            raise ValueError(
-                f"Service account file not found: {self.credentials_path}\n"
-                f"Please ensure GOOGLE_APPLICATION_CREDENTIALS environment variable "
-                f"points to a valid service account JSON file."
-            )
-        
         # Define scopes - updated to allow read/write
         self.scopes = [
             'https://www.googleapis.com/auth/drive',
             'https://www.googleapis.com/auth/drive.file'
         ]
         
-        # Authenticate
-        self.credentials = service_account.Credentials.from_service_account_file(
-            self.credentials_path,
-            scopes=self.scopes
-        )
+        credentials_json = os.getenv("GOOGLE_CREDENTIALS")
+        if credentials_json:
+            try:
+                creds_info = json.loads(credentials_json)
+                self.credentials = service_account.Credentials.from_service_account_info(
+                    creds_info, scopes=self.scopes
+                )
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON in GOOGLE_CREDENTIALS: {credentials_json}")
+                
+
+        else:
+            self.credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
+            if not os.path.exists(self.credentials_path):
+                raise ValueError(
+                    f"Service account file not found: {self.credentials_path}\n"
+                    f"Please ensure GOOGLE_APPLICATION_CREDENTIALS environment variable "
+                    f"points to a valid service account JSON file, or set GOOGLE_CREDENTIALS "
+                    f"with the JSON content."
+                )
+            self.credentials = service_account.Credentials.from_service_account_file(
+                self.credentials_path,
+                scopes=self.scopes
+            )
         
         # Build service
         self.service = build('drive', 'v3', credentials=self.credentials)

@@ -21,14 +21,14 @@ tavily-python
 langchain-qdrant
 langgraph-checkpoint-postgres
 langgraph-checkpoint-sqlite
-
+aiosqlite==0.21.0
 # Vector DB
 faiss-cpu
 
 # PDF & Images
 pymupdf
 pillow
-PyPDF2
+pypdf
 
 # Analysis & Table Extraction
 beautifulsoup4
@@ -60,3 +60,6 @@ fastmcp
 # UI
 
 psycopg2-binary
+
+# Pin websockets to avoid deprecation warning
+websockets

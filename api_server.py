@@ -5,6 +5,7 @@ Exposes the supervisor agent functionality via REST API
 
 import asyncio
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -51,11 +52,31 @@ agents_initialized = False
 saver = None  # Add saver to global scope
 saver_cm = None  # Store context manager
 
-# FastAPI app
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events"""
+    # Startup
+    global supervisor, agents_initialized, saver, saver_cm
+    try:
+        await initialize_agents()
+        yield
+    finally:
+        # Shutdown
+        if saver_cm is not None:
+            try:
+                await saver_cm.__aexit__(None, None, None)
+                print("✅ Memory saver cleaned up successfully")
+            except Exception as e:
+                print(f"⚠️ Error cleaning up memory saver: {e}")
+
+
+# FastAPI app with lifespan
 app = FastAPI(
     title="Data Sources MCP Supervisor API",
     description="REST API for the Data Sources MCP Supervisor Agent",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -158,21 +179,6 @@ async def initialize_agents():
         print(f"❌ Failed to initialize agents: {str(e)}")
         raise
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize agents on server startup"""
-    await initialize_agents()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on server shutdown"""
-    global saver_cm
-    if saver_cm is not None:
-        try:
-            await saver_cm.__aexit__(None, None, None)
-            print("✅ Memory saver cleaned up successfully")
-        except Exception as e:
-            print(f"⚠️ Error cleaning up memory saver: {e}")
 
 @app.get("/", tags=["Health"])
 async def root():

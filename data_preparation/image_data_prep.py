@@ -7,14 +7,11 @@ import base64
 import hashlib
 from datetime import datetime
 from PIL import Image, ImageEnhance
-from langchain.schema import Document
+from langchain_core.documents import Document
 from pathlib import Path
 from dotenv import load_dotenv
 
-
 load_dotenv()
-
-
 
 class ImageDescription:
     "This method is used to get the description of the image."

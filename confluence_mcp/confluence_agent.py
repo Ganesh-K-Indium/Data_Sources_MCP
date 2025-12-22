@@ -2,7 +2,7 @@ import asyncio
 import aiohttp
 from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.tools import load_mcp_tools
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langgraph_supervisor import create_supervisor
 from langchain.chat_models import init_chat_model
 from mcp import ClientSession
@@ -100,11 +100,11 @@ async def create_confluence_agent(checkpointer=None):
     await session.initialize()
     tools = await load_mcp_tools(session)
     
-    agent = create_react_agent(
+    agent = create_agent(
         model=model,
         tools=tools,
         name="confluence_agent",
-        prompt=system_prompt,
+        system_prompt=system_prompt,
         checkpointer=checkpointer
     )
     

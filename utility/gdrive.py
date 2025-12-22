@@ -1,6 +1,7 @@
 # IngestionGraph/utils/gdrive.py
 import os
 import io
+import json
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2 import service_account
@@ -17,13 +18,19 @@ def download_pdfs_from_folder(folder_id: str, local_folder: str = "downloaded_pd
     Returns:
         List of local file paths for downloaded PDFs
     """
-    credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if not credentials_path:
-        raise EnvironmentError("GOOGLE_APPLICATION_CREDENTIALS environment variable not set.")
-
-    creds = service_account.Credentials.from_service_account_file(
-        credentials_path, scopes=["https://www.googleapis.com/auth/drive.readonly"]
-    )
+    credentials_json = os.getenv("GOOGLE_CREDENTIALS")
+    if credentials_json:
+        creds_info = json.loads(credentials_json)
+        creds = service_account.Credentials.from_service_account_info(
+            creds_info, scopes=["https://www.googleapis.com/auth/drive.readonly"]
+        )
+    else:
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if not credentials_path:
+            raise EnvironmentError("Neither GOOGLE_CREDENTIALS nor GOOGLE_APPLICATION_CREDENTIALS environment variable is set.")
+        creds = service_account.Credentials.from_service_account_file(
+            credentials_path, scopes=["https://www.googleapis.com/auth/drive.readonly"]
+        )
     service = build("drive", "v3", credentials=creds)
 
     os.makedirs(local_folder, exist_ok=True)

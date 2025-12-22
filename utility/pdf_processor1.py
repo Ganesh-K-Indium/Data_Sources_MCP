@@ -7,7 +7,7 @@ import traceback
 from datetime import datetime
 import fitz  # PyMuPDF
 from qdrant_client import models
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from vector_store.load_dbs import load_vector_database

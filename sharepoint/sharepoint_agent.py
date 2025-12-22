@@ -7,7 +7,7 @@ import asyncio
 import aiohttp
 from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.tools import load_mcp_tools
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from dotenv import load_dotenv
@@ -116,11 +116,11 @@ async def create_sharepoint_agent(checkpointer=None):
     await session.initialize()
     tools = await load_mcp_tools(session)
     
-    agent = create_react_agent(
+    agent = create_agent(
         model=model,
         tools=tools,
         name="sharepoint_agent",
-        prompt=system_prompt,
+        system_prompt=system_prompt,
         checkpointer=checkpointer
     )
     

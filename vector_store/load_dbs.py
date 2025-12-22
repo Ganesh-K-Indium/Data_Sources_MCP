@@ -16,10 +16,11 @@ class load_vector_database():
     "This class is useful for loading the vector DBs"
     def __init__(self):
         self.image_vector_db_path = "multimodel_vector_db"  # collection name
-        self.text_vector_db_path = "10K_vector_db"          # collection name
+        self.text_vector_db_path = "10K_vector_db"      
         self.embeddings = OpenAIEmbeddings()
         self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
-        self.qdrant_client = QdrantClient(url=self.qdrant_url)
+        self.qdrant_api_key = os.getenv("QDRANT_API_KEY")
+        self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_api_key)
     
     def get_image_retriever(self):
         image_vectorstore_10k = QdrantVectorStore(

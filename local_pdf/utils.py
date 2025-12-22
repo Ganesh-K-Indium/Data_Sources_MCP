@@ -7,7 +7,7 @@ import json
 import shutil
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-import PyPDF2
+import pypdf
 
 
 def list_pdfs_in_directory(directory_path: str, recursive: bool = False) -> List[Dict[str, Any]]:
@@ -54,7 +54,7 @@ def read_pdf_content(file_path: str, max_pages: int = 10) -> str:
     try:
         content = []
         with open(file_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
+            pdf_reader = pypdf.PdfReader(file)
             num_pages = min(len(pdf_reader.pages), max_pages)
             
             for page_num in range(num_pages):
@@ -75,7 +75,7 @@ def get_pdf_metadata(file_path: str) -> Dict[str, Any]:
     try:
         file_stats = os.stat(file_path)
         with open(file_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
+            pdf_reader = pypdf.PdfReader(file)
             
             metadata = {
                 "file_name": os.path.basename(file_path),

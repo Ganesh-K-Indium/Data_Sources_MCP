@@ -386,10 +386,15 @@ def test_gdrive_connection() -> str:
         is_connected = client.test_connection()
         
         if is_connected:
+            credentials_json = os.getenv("GOOGLE_CREDENTIALS")
+            if credentials_json:
+                credentials_info = "GOOGLE_CREDENTIALS environment variable"
+            else:
+                credentials_info = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
             return json.dumps({
                 "success": True,
                 "message": "Successfully connected to Google Drive",
-                "credentials_file": os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
+                "credentials_source": credentials_info
             }, indent=2)
         else:
             return json.dumps({
@@ -534,16 +539,29 @@ def get_gdrive_mode() -> str:
         JSON string with mode information
     """
     try:
-        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
-        return json.dumps({
-            "success": True,
-            "mode": "Service Account",
-            "credentials_file": credentials_path,
-            "scopes": [
-                "https://www.googleapis.com/auth/drive",
-                "https://www.googleapis.com/auth/drive.file"
-            ]
-        }, indent=2)
+        credentials_json = os.getenv("GOOGLE_CREDENTIALS")
+        if credentials_json:
+            mode_info = {
+                "success": True,
+                "mode": "Service Account (from GOOGLE_CREDENTIALS env var)",
+                "credentials_source": "GOOGLE_CREDENTIALS environment variable",
+                "scopes": [
+                    "https://www.googleapis.com/auth/drive",
+                    "https://www.googleapis.com/auth/drive.file"
+                ]
+            }
+        else:
+            credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "service_account.json")
+            mode_info = {
+                "success": True,
+                "mode": "Service Account",
+                "credentials_file": credentials_path,
+                "scopes": [
+                    "https://www.googleapis.com/auth/drive",
+                    "https://www.googleapis.com/auth/drive.file"
+                ]
+            }
+        return json.dumps(mode_info, indent=2)
     except Exception as e:
         return json.dumps({
             "success": False,
