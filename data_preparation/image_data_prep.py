@@ -301,7 +301,7 @@ class ImageDescription:
             2. The key data/insights from the image
             3. How it relates to the surrounding text context
             
-            Provide ONLY the essential information in 2-3 sentences. Focus on:
+            Provide ONLY the essential information. Focus on:
             - Chart/table type and main topic
             - Key numbers, percentages, or trends visible
             - Business context from surrounding text
@@ -324,7 +324,7 @@ class ImageDescription:
                         ]
                     }
                 ],
-                max_tokens=300,  # Keep responses concise
+                max_tokens=1000,  # Keep responses concise
                 temperature=0.1
             )
             
@@ -432,10 +432,21 @@ class ImageDescription:
     def getRetriever(self, json_file_path, company, image_hashes=None):
         """Enhanced retriever that includes image hashes in metadata."""
         with open(json_file_path, "r", encoding="utf-8") as file:
-            image_descriptions = json.load(file)     
+            image_descriptions = json.load(file)
+        
         image_docs = []
         
-        for i, (image_path, caption) in enumerate(image_descriptions.items()):
+        # Handle nested 'metadata' key for backward compatibility
+        if isinstance(image_descriptions, dict) and "metadata" in image_descriptions:
+            actual_images = image_descriptions["metadata"]
+        else:
+            actual_images = image_descriptions
+        
+        for i, (image_path, caption) in enumerate(actual_images.items()):
+            # Ensure caption is a string (not a dict)
+            if isinstance(caption, dict):
+                caption = str(caption)
+            
             image_metadata = self.get_image_data(image_path, caption, company)
             
             # Add image content hash if available

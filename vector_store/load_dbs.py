@@ -19,8 +19,27 @@ class load_vector_database():
         self.text_vector_db_path = "10K_vector_db"      
         self.embeddings = OpenAIEmbeddings()
         self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
-        self.qdrant_api_key = os.getenv("QDRANT_API_KEY")
-        self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_api_key)
+        self.qdrant_api_key = os.getenv("QDRANT_API_KEY",'')
+        
+        # Try cloud Qdrant first, fallback to local
+        try:
+            print(f"Attempting to connect to Qdrant at: {self.qdrant_url}")
+            self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_api_key, timeout=5)
+            # Test connection by getting collections
+            self.qdrant_client.get_collections()
+            print(f"✓ Successfully connected to Qdrant at {self.qdrant_url}")
+        except Exception as e:
+            print(f"✗ Failed to connect to cloud Qdrant: {e}")
+            print("Falling back to local Qdrant at http://localhost:6333")
+            self.qdrant_url = "http://localhost:6333"
+            self.qdrant_api_key = ''
+            try:
+                self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_api_key, timeout=5)
+                self.qdrant_client.get_collections()
+                print(f"✓ Successfully connected to local Qdrant")
+            except Exception as local_error:
+                print(f"✗ Failed to connect to local Qdrant: {local_error}")
+                raise ConnectionError("Unable to connect to both cloud and local Qdrant instances. Please ensure Qdrant is running.")
     
     def get_image_retriever(self):
         image_vectorstore_10k = QdrantVectorStore(

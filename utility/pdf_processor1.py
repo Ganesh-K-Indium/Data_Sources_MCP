@@ -26,6 +26,160 @@ def init_vector_stores():
     
     return text_vectorstore, image_vectorstore
 
+# Mapping of stock tickers to company names
+TICKER_TO_COMPANY = {
+    # Tech companies
+    'aapl': 'apple',
+    'msft': 'microsoft',
+    'googl': 'alphabet',
+    'goog': 'alphabet',
+    'amzn': 'amazon',
+    'nvda': 'nvidia',
+    'tsla': 'tesla',
+    'meta': 'meta',
+    'fb': 'meta',
+    'nflx': 'netflix',
+    'amd': 'amd',
+    'intc': 'intel',
+    'qcom': 'qualcomm',
+    'csco': 'cisco',
+    'acn': 'accenture',
+    'ibm': 'ibm',
+    'orcl': 'oracle',
+    'sap': 'sap',
+    'crm': 'salesforce',
+    'adbe': 'adobe',
+    'uber': 'uber',
+    'lyft': 'lyft',
+    'shop': 'shopify',
+    'spot': 'spotify',
+    'zoom': 'zoom',
+    'twlo': 'twilio',
+    'coin': 'coinbase',
+    'pypl': 'paypal',
+    'sqm': 'square',
+    'snps': 'synopsys',
+    'cdns': 'cadence',
+    
+    # Financial companies
+    'jpm': 'jpmorgan',
+    'bac': 'bankofamerica',
+    'gs': 'goldman',
+    'ms': 'morgan',
+    'wu': 'western',
+    'v': 'visa',
+    'ma': 'mastercard',
+    'axa': 'axa',
+    'axp': 'amex',
+    'c': 'citigroup',
+    'wfc': 'wells',
+    'tfc': 'truist',
+    'bnc': 'banco',
+    
+    # Healthcare
+    'jnj': 'johnson',
+    'pfe': 'pfizer',
+    'mrna': 'moderna',
+    'abbv': 'abbvie',
+    'ulvr': 'unilever',
+    'cvx': 'chevron',
+    'xom': 'exxon',
+    'cop': 'conocophillips',
+    'slb': 'schlumberger',
+    
+    # Energy
+    'psa': 'peugeot',
+    'bp': 'bp',
+    'rds': 'royaldutch',
+    'shel': 'shell',
+    
+    # Retail & Consumer
+    'wmt': 'walmart',
+    'hd': 'homedepot',
+    'ko': 'coca',
+    'pep': 'pepsi',
+    'mcd': 'mcdonalds',
+    'nke': 'nike',
+    'lulu': 'lululemon',
+    'nvr': 'nvr',
+    'hm': 'hmgroup',
+    'pm': 'philipmorris',
+    'mbb': 'mutual',
+    
+    # Automotive
+    'gm': 'generalmotors',
+    'f': 'ford',
+    'gme': 'gamestop',
+    'tslaq': 'tesla',
+    
+    # Industrial
+    'ba': 'boeing',
+    'ge': 'ge',
+    'cat': 'caterpillar',
+    'hog': 'harley',
+    'axp': 'americanexpress',
+    
+    # Real Estate
+    'vno': 'vornado',
+    'spg': 'simon',
+    'pld': 'prologis',
+}
+
+def extract_company_name(file_name: str) -> str:
+    """
+    Extract company name from a file name, handling various patterns and ticker symbols.
+    Preserves spaces in multi-word company names.
+    
+    Examples:
+        - "aapl_2023.pdf" -> "apple" (ticker mapped)
+        - "apple_2023.pdf" -> "apple"
+        - "FORD MOTORS.pdf" -> "ford motors" (space preserved)
+        - "TSLA_2024_10k.pdf" -> "tesla" (ticker mapped)
+        - "microsoft-2023.pdf" -> "microsoft"
+        - "apple.pdf" -> "apple"
+    
+    Args:
+        file_name: The file name to extract company name from
+    
+    Returns:
+        str: The extracted company name in lowercase, with spaces preserved where appropriate
+    """
+    # Remove file extension
+    name_without_ext = os.path.splitext(file_name)[0]
+    
+    # Replace common separators (-, _, .) with space
+    name = re.sub(r'[-_.]', ' ', name_without_ext)
+    
+    # Remove common year patterns (e.g., 2020, 2021, etc.)
+    name = re.sub(r'\b(19|20)\d{2}\b', '', name)
+    
+    # Remove common document type suffixes (10k, 10-k, 10q, 10-q, etc.)
+    name = re.sub(r'\b(10[-\s]?[kq]|annual|quarterly|report)\b', '', name, flags=re.IGNORECASE)
+    
+    # Remove any trailing numbers
+    name = re.sub(r'\s+\d+\s*$', '', name)
+    
+    # Clean up extra whitespace (multiple spaces to single space, trim)
+    name = ' '.join(name.split())
+    
+    if not name:
+        # Fallback: return original name without extension if extraction fails
+        return name_without_ext.lower()
+    
+    # Convert to lowercase
+    company = name.lower()
+    
+    # Check if the first word is a known ticker symbol and map it
+    first_word = company.split()[0]
+    if first_word in TICKER_TO_COMPANY:
+        # Map the ticker to company name
+        mapped_name = TICKER_TO_COMPANY[first_word]
+        # If there are more words after the ticker, append them
+        remaining_words = ' '.join(company.split()[1:])
+        company = f"{mapped_name} {remaining_words}".strip() if remaining_words else mapped_name
+    
+    return company
+
 def calculate_content_hash(pdf_path: str) -> str:
     """Calculate a deterministic hash of the PDF content."""
     try:
@@ -279,7 +433,7 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
         yield f"Processing document: {uploaded_pdf_path}"
         pdf_document = fitz.open(uploaded_pdf_path)
         source_file_name = os.path.basename(uploaded_pdf_path)
-        company_name = os.path.splitext(source_file_name)[0]
+        company_name = extract_company_name(source_file_name)
 
         # Initialize vector stores
         text_vectorstore, image_vectorstore = init_vector_stores()
@@ -374,17 +528,14 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
 
         if not image_already_exists:
             if image_info:  # image_info already extracted above
-                # Save metadata with timestamp
+                # Save metadata with timestamp - FLAT STRUCTURE for getRetriever compatibility
                 metadata_path = f"metadata_{source_file_name}.json"
-                metadata_with_timestamp = {
-                    "metadata": image_info,
-                    "ingestion_timestamp": str(datetime.now()),
-                    "source_file": source_file_name,
-                    "company": company_name
-                }
+                # The getRetriever method expects: { "image_path": "caption_text", ... }
+                # not { "metadata": { "image_path": "caption_text" } }
+                metadata_to_save = image_info.copy()  # Use image_info directly (flat structure)
                 
                 with open(metadata_path, "w", encoding="utf-8") as f:
-                    json.dump(metadata_with_timestamp, f, indent=2)
+                    json.dump(metadata_to_save, f, indent=2)
                 yield f"Saved image metadata to {metadata_path}"
 
                 # Get image documents with enhanced metadata including hashes
