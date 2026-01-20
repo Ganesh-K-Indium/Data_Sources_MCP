@@ -12,11 +12,26 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from vector_store.load_dbs import load_vector_database
 from data_preparation.image_data_prep import ImageDescription
+from dotenv import load_dotenv
+load_dotenv()
 
 
-def init_vector_stores():
-    """Initialize and return text and image vector stores with proper collection setup."""
-    db_init = load_vector_database()
+def init_vector_stores(use_hybrid_search: bool = None):
+    """
+    Initialize and return text and image vector stores with proper collection setup.
+    
+    Args:
+        use_hybrid_search: If True, use hybrid collections with BM25. If None, 
+                          auto-detect based on USE_HYBRID_SEARCH env var (default: False)
+    
+    Returns:
+        tuple: (text_vectorstore, image_vectorstore)
+    """
+    # Auto-detect hybrid search mode from environment variable if not specified
+    if use_hybrid_search is None:
+        use_hybrid_search = os.getenv("USE_HYBRID_SEARCH", "false").lower() == "true"
+    
+    db_init = load_vector_database(use_hybrid_search=use_hybrid_search)
     
     # Initialize text vector store
     text_retriever, text_vectorstore, _ = db_init.get_text_retriever()
@@ -236,7 +251,18 @@ def check_document_exists(vectorstore, source_file_name: str, doc_type: str = "t
         print("\nDebug: Checking collection info...")
         collection_info = vectorstore.client.get_collection(vectorstore.collection_name)
         print(f"Collection size: {collection_info.points_count} points")
-        print(f"Collection vectors dimension: {collection_info.config.params.vectors.size}")
+        
+        # Handle both standard and hybrid collections (named vectors)
+        vectors_config = collection_info.config.params.vectors
+        if isinstance(vectors_config, dict):
+            # Hybrid collection with named vectors
+            vector_names = list(vectors_config.keys())
+            print(f"Collection vectors: {vector_names} (hybrid collection)")
+            if "dense" in vectors_config:
+                print(f"Collection dense vector dimension: {vectors_config['dense'].size}")
+        else:
+            # Standard collection with single vector
+            print(f"Collection vectors dimension: {vectors_config.size}")
         
         # Build the filter based on content hash if available, otherwise fallback to filename
         filter_conditions = [
@@ -468,7 +494,7 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
             if documents:
                 yield f"Extracted {len(documents)} text segments from PDF."
                 text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-                    chunk_size=1000, chunk_overlap=100
+                    chunk_size=4096, chunk_overlap=400
                 )
                 text_chunks = text_splitter.split_documents(documents)
 

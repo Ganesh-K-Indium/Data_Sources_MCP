@@ -40,6 +40,9 @@ from qdrant_client.models import (
     VectorParams,
     PayloadSchemaType,
     CreateCollection,
+    SparseVectorParams,
+    SparseIndexParams,
+    Modifier,
 )
 from dotenv import load_dotenv
 
@@ -53,12 +56,23 @@ def create_qdrant_collection(collection_name: str, qdrant_url: str):
         api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.FaGNNWrPYfqylEckrKjiwOmBvcTFxqx0pvOT5dy_k5M"   # <- put your cloud key
     )
 
-    print(f"Recreating collection '{collection_name}' with payload indexes...")
+    print(f"Recreating collection '{collection_name}' with hybrid search (dense + sparse/BM25) and payload indexes...")
 
-    # Drop and recreate collection
+    # Drop and recreate collection with hybrid search support
+    # Using named vectors: "dense" for semantic similarity, "sparse" for BM25 keyword search
     client.recreate_collection(
         collection_name=collection_name,
-        vectors_config=VectorParams(size=embedding_dim, distance=Distance.COSINE)
+        vectors_config={
+            "dense": VectorParams(size=embedding_dim, distance=Distance.COSINE)
+        },
+        sparse_vectors_config={
+            "sparse": SparseVectorParams(
+                index=SparseIndexParams(
+                    on_disk=False,  # Set to True for large datasets to save memory
+                ),
+                modifier=Modifier.IDF  # Essential for BM25-like weighting (Inverse Document Frequency)
+            )
+        }
     )
 
     # -------------------------------
@@ -82,12 +96,12 @@ def create_qdrant_collection(collection_name: str, qdrant_url: str):
             field_schema=schema,
         )
 
-    print(f"✅ Collection '{collection_name}' created with all required indexes.")
+    print(f"✅ Collection '{collection_name}' created with hybrid search support (dense + sparse/BM25) and all required indexes.")
 
 
 if __name__ == "__main__":
-    create_qdrant_collection("multimodel_vector_db",
+    create_qdrant_collection("multimodel_vector_db_hybrid",
                              qdrant_url="https://edb6ba88-59c8-4b02-b8d1-2e7a7738ca40.us-east-1-1.aws.cloud.qdrant.io:6333")
 
-    create_qdrant_collection("10K_vector_db",
+    create_qdrant_collection("10K_vector_db_hybrid",
                              qdrant_url="https://edb6ba88-59c8-4b02-b8d1-2e7a7738ca40.us-east-1-1.aws.cloud.qdrant.io:6333")
