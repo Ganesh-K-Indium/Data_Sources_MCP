@@ -572,7 +572,9 @@ class ImageDescription:
         print(f"   • Successfully analyzed: {processed_count}/{len(contexts)} images")
         print(f"   • Skipped (decorative/invalid): {skipped_count} images")
         print(f"   • Results saved to: {output_file}")
-        return output_file
+        
+        # Return the dictionary of image analyses for ingestion
+        return image_analyses
 
     def get_image_data(self,image_path,caption,company):
         """Fixed path handling for cross-platform compatibility."""
