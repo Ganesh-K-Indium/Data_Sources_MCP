@@ -1,64 +1,57 @@
 """
-this module is used for loading the image related data and vector db retriever
+this module is used for loading the unified RAG database with hybrid search capabilities
 """
 
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
-from langchain_qdrant import QdrantVectorStore, RetrievalMode  # Updated LangChain Qdrant integration
+from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
+from qdrant_client import models
+from tqdm import tqdm
 import os
 
 load_dotenv()
 
-from qdrant_client.http.models import Filter
-
-# Try to import FastEmbedSparse for BM25 sparse vectors
+# Try to import FastEmbed for sparse embeddings
 try:
-    from langchain_qdrant import FastEmbedSparse
+    from fastembed import SparseTextEmbedding
     SPARSE_EMBEDDING_AVAILABLE = True
 except ImportError:
     SPARSE_EMBEDDING_AVAILABLE = False
-    print("Warning: FastEmbedSparse not available. Install with: pip install 'langchain-qdrant[fastembed]' or 'fastembed'")
+    print("Warning: fastembed not available. Install with: pip install fastembed")
 
 class load_vector_database():
-    "This class is useful for loading the vector DBs"
-    def __init__(self, use_hybrid_search: bool = False):
+    """Unified vector database loader with advanced hybrid search capabilities"""
+    
+    def __init__(self, use_hybrid_search: bool = True):
         """
-        Initialize vector database loader.
+        Initialize unified vector database loader with hybrid search.
         
         Args:
-            use_hybrid_search: If True, use hybrid collections with BM25 sparse vectors.
-                              If False, use standard collections.
+            use_hybrid_search: If True, use hybrid search with dense, sparse (BM25), and ColBERT vectors.
         """
-        # Use hybrid collections if specified, otherwise use standard collections
-        if use_hybrid_search:
-            self.image_vector_db_path = "multimodel_vector_db_hybrid"  # hybrid collection name
-            self.text_vector_db_path = "10K_vector_db_hybrid"
-        else:
-            self.image_vector_db_path = "multimodel_vector_db_new"  # standard collection name
-            self.text_vector_db_path = "10K_vector_db_new"
-        
+        # Use unified collection for both text and images
+        self.collection_name = "unified_rag_db_hybrid"
         self.use_hybrid_search = use_hybrid_search
+        
+        # Initialize embeddings
         self.embeddings = OpenAIEmbeddings()
         self.qdrant_url = os.getenv("QDRANT_URL", "")
-        self.qdrant_api_key = os.getenv("QDRANT_API_KEY",'')
+        self.qdrant_api_key = os.getenv("QDRANT_API_KEY", '')
         
-        # Initialize sparse embeddings for hybrid search if available
-        self.sparse_embeddings = None
+        # Initialize sparse embeddings for BM25 if available
+        self.sparse_model = None
         if use_hybrid_search and SPARSE_EMBEDDING_AVAILABLE:
             try:
-                self.sparse_embeddings = FastEmbedSparse(model_name="Qdrant/bm25")
-                print("✓ BM25 sparse embeddings initialized for hybrid search")
+                self.sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+                print("✓ BM25 sparse embeddings initialized")
             except Exception as e:
                 print(f"Warning: Failed to initialize sparse embeddings: {e}")
-                print("Falling back to dense-only search")
-                self.use_hybrid_search = False
         
         # Try cloud Qdrant first, fallback to local
         try:
             print(f"Attempting to connect to Qdrant at: {self.qdrant_url}")
             self.qdrant_client = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_api_key, timeout=60)
-            # Test connection by getting collections
             self.qdrant_client.get_collections()
             print(f"✓ Successfully connected to Qdrant at {self.qdrant_url}")
         except Exception as e:
@@ -72,90 +65,188 @@ class load_vector_database():
                 print(f"✓ Successfully connected to local Qdrant")
             except Exception as local_error:
                 print(f"✗ Failed to connect to local Qdrant: {local_error}")
-                raise ConnectionError("Unable to connect to both cloud and local Qdrant instances. Please ensure Qdrant is running.")
+                raise ConnectionError("Unable to connect to Qdrant instances.")
     
-    def get_image_retriever(self):
-        # Configure vector store based on whether hybrid search is enabled
+    def get_unified_vectorstore(self):
+        """
+        Get the unified vector store for both text and images.
+        Uses LangChain's QdrantVectorStore for compatibility.
+        """
         vector_store_kwargs = {
             "client": self.qdrant_client,
-            "collection_name": self.image_vector_db_path,
-            "embedding": self.embeddings
+            "collection_name": self.collection_name,
+            "embedding": self.embeddings,
+            "vector_name": "dense"  # Specify the dense vector name
         }
-        
-        # If using hybrid collections (ending with _hybrid), always specify vector_name
-        # because these collections use named vectors
-        if "_hybrid" in self.image_vector_db_path:
-            vector_store_kwargs["vector_name"] = "dense"
-        
-        # Add sparse vector config if hybrid search is fully enabled
-        if self.use_hybrid_search and self.sparse_embeddings:
-            vector_store_kwargs.update({
-                "sparse_embedding": self.sparse_embeddings,
-                "retrieval_mode": RetrievalMode.HYBRID,
-                "sparse_vector_name": "sparse"  # Match the sparse vector name from flush.py
-            })
-        
-        image_vectorstore_10k = QdrantVectorStore(**vector_store_kwargs)
-        image_retriever_10k = image_vectorstore_10k.as_retriever(search_kwargs={"k": 4})  
-        return image_vectorstore_10k, image_retriever_10k, self.image_vector_db_path
-    
-    def get_text_retriever(self):
-        # Configure vector store based on whether hybrid search is enabled
-        vector_store_kwargs = {
-            "client": self.qdrant_client,
-            "collection_name": self.text_vector_db_path,
-            "embedding": self.embeddings
-        }
-        
-        # If using hybrid collections (ending with _hybrid), always specify vector_name
-        # because these collections use named vectors
-        if "_hybrid" in self.text_vector_db_path:
-            vector_store_kwargs["vector_name"] = "dense"
-        
-        # Add sparse vector config if hybrid search is fully enabled
-        if self.use_hybrid_search and self.sparse_embeddings:
-            vector_store_kwargs.update({
-                "sparse_embedding": self.sparse_embeddings,
-                "retrieval_mode": RetrievalMode.HYBRID,
-                "sparse_vector_name": "sparse"  # Match the sparse vector name from flush.py
-            })
         
         vectorstore = QdrantVectorStore(**vector_store_kwargs)
-        retriever = vectorstore.as_retriever(
-            search_kwargs={"k": 4}
-        )
-        return retriever, vectorstore, self.text_vector_db_path
+        return vectorstore
     
-    def get_vector_store_files(self, vectorstore):
-        doc_list = set()
-
-        points, _ = vectorstore.client.scroll(
-            collection_name=vectorstore.collection_name,
-            with_payload=True,
-            limit=1000
+    def hybrid_search(self, query: str, content_type: str = None, company: str = None, 
+                     limit: int = 10, dense_limit: int = 100, sparse_limit: int = 100):
+        """
+        Advanced hybrid search using prefetch and fusion queries (RRF).
+        
+        Args:
+            query: Search query text
+            content_type: Filter by content type ("text" or "image"), None for both
+            company: Filter by company name
+            limit: Final number of results to return
+            dense_limit: Number of results from dense vector search
+            sparse_limit: Number of results from sparse (BM25) search
+            
+        Returns:
+            List of search results with payloads
+        """
+        # Generate dense embeddings (OpenAI)
+        dense_vector = self.embeddings.embed_query(query)
+        
+        # Generate sparse vector if available
+        sparse_vector = None
+        if self.sparse_model:
+            try:
+                sparse_embeddings = list(self.sparse_model.embed([query]))
+                if sparse_embeddings:
+                    # Convert to Qdrant sparse vector format
+                    sparse_emb = sparse_embeddings[0]
+                    sparse_vector = models.SparseVector(
+                        indices=sparse_emb.indices.tolist(),
+                        values=sparse_emb.values.tolist()
+                    )
+            except Exception as e:
+                print(f"Warning: Failed to generate sparse embedding: {e}")
+        
+        # Build filter conditions
+        filter_conditions = []
+        if content_type:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="metadata.content_type",
+                    match=models.MatchValue(value=content_type)
+                )
+            )
+        if company:
+            filter_conditions.append(
+                models.FieldCondition(
+                    key="metadata.company",
+                    match=models.MatchValue(value=company.lower())
+                )
+            )
+        
+        global_filter = models.Filter(must=filter_conditions) if filter_conditions else None
+        
+        # Build hybrid query with prefetch and fusion
+        prefetch_queries = []
+        
+        # Dense retrieval: semantic understanding
+        prefetch_queries.append(
+            models.Prefetch(
+                query=dense_vector,
+                using="dense",
+                limit=dense_limit
+            )
         )
-
-        for point in points:
-            payload = point.payload  # <-- access directly
-            doc_list.add(payload.get("source_file", "Unknown"))
-
-        return ' ,'.join(doc_list)
-
-
-    def get_img_vector_store_companies(self, img_vector_store):
-        doc_list = set()
-
-        points, _ = img_vector_store.client.scroll(
-            collection_name=img_vector_store.collection_name,
-            with_payload=True,
-            limit=1000
+        
+        # Sparse retrieval: exact term matching with BM25
+        if sparse_vector:
+            prefetch_queries.append(
+                models.Prefetch(
+                    query=sparse_vector,
+                    using="bm25",
+                    limit=sparse_limit
+                )
+            )
+        
+        # Fusion query combining dense and sparse results with RRF
+        fusion_prefetch = models.Prefetch(
+            prefetch=prefetch_queries,
+            query=models.FusionQuery(fusion=models.Fusion.RRF),  # Reciprocal Rank Fusion
+            limit=limit
         )
-
-        for point in points:
-            payload = point.payload  # <-- access directly
-            doc_list.add(payload.get("company", "Unknown"))
-
-        return ' ,'.join(doc_list)
+        
+        # Final query using RRF fusion results
+        try:
+            response = self.qdrant_client.query_points(
+                collection_name=self.collection_name,
+                prefetch=fusion_prefetch,
+                query=dense_vector,  # Use dense for final scoring
+                using="dense",
+                query_filter=global_filter,
+                limit=limit,
+                with_payload=True,
+            )
+            
+            return response.points
+            
+        except Exception as e:
+            print(f"Error in hybrid search: {e}")
+            # Fallback to simple dense search
+            return self._fallback_search(dense_vector, global_filter, limit)
+    
+    def _fallback_search(self, query_vector, query_filter, limit):
+        """Fallback to simple dense vector search if hybrid search fails."""
+        try:
+            response = self.qdrant_client.query_points(
+                collection_name=self.collection_name,
+                query=query_vector,
+                using="dense",
+                query_filter=query_filter,
+                limit=limit,
+                with_payload=True,
+            )
+            return response.points
+        except Exception as e:
+            print(f"Error in fallback search: {e}")
+            return []
+    
+    def generate_embeddings_for_ingestion(self, texts: list[str]) -> dict:
+        """
+        Generate all required embeddings (dense, sparse) for document ingestion.
+        
+        Args:
+            texts: List of text strings to embed
+            
+        Returns:
+            dict with 'dense' and 'sparse' embedding lists
+        """
+        result = {
+            'dense': [],
+            'sparse': []
+        }
+        
+        # Generate dense embeddings (OpenAI)
+        print(f"\n🔄 Generating dense embeddings for {len(texts)} documents...")
+        for text in tqdm(texts, desc="Dense embeddings (OpenAI)", unit="doc"):
+            dense_emb = self.embeddings.embed_query(text)
+            result['dense'].append(dense_emb)
+        
+        # Generate sparse embeddings (BM25)
+        if self.sparse_model:
+            print(f"\n🔄 Generating sparse embeddings for {len(texts)} documents...")
+            try:
+                # Use tqdm with the generator
+                sparse_embeddings = []
+                for sparse_emb in tqdm(self.sparse_model.embed(texts), 
+                                      desc="Sparse embeddings (BM25)", 
+                                      total=len(texts), 
+                                      unit="doc"):
+                    sparse_embeddings.append(sparse_emb)
+                
+                for sparse_emb in sparse_embeddings:
+                    result['sparse'].append(
+                        models.SparseVector(
+                            indices=sparse_emb.indices.tolist(),
+                            values=sparse_emb.values.tolist()
+                        )
+                    )
+            except Exception as e:
+                print(f"Warning: Failed to generate sparse embeddings: {e}")
+                result['sparse'] = [None] * len(texts)
+        else:
+            result['sparse'] = [None] * len(texts)
+        
+        print(f"✅ Generated embeddings: {len(result['dense'])} dense, {len([s for s in result['sparse'] if s is not None])} sparse")
+        return result
 
 
 

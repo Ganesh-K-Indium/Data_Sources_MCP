@@ -6,6 +6,7 @@ import openai
 import base64
 import hashlib
 from datetime import datetime
+from tqdm import tqdm
 from PIL import Image, ImageEnhance
 from langchain_core.documents import Document
 from pathlib import Path
@@ -47,7 +48,7 @@ class ImageDescription:
     
     def save_images(self,img_info,page_num,pdf_document,output_dir):
         """
-        Advanced image preprocessing for optimal financial data extraction.
+        Enhanced image preprocessing optimized for financial data extraction with better detail preservation.
         """
         try:
             xref = img_info[0]
@@ -64,47 +65,53 @@ class ImageDescription:
             else:
                 img = original_img.copy()
             
-            # Multi-stage image enhancement for financial documents
-            
-            # 1. Contrast enhancement for better text/number visibility
-            contrast_enhancer = ImageEnhance.Contrast(img)
-            img = contrast_enhancer.enhance(1.3)  # Slightly higher for financial docs
-            
-            # 2. Sharpness enhancement for clearer text
-            sharpness_enhancer = ImageEnhance.Sharpness(img)
-            img = sharpness_enhancer.enhance(1.2)
-            
-            # 3. Brightness adjustment if needed (avoid over-brightening)
-            brightness_enhancer = ImageEnhance.Brightness(img)
-            img = brightness_enhancer.enhance(1.05)
-            
-            # 4. Ensure optimal size for analysis
             original_size = img.size
             min_dimension = min(img.size)
             max_dimension = max(img.size)
             
-            # Scale up small images for better readability
-            if min_dimension < 400:
-                scale_factor = 400 / min_dimension
-                new_size = (int(img.size[0] * scale_factor), int(img.size[1] * scale_factor))
-                img = img.resize(new_size, Image.Resampling.LANCZOS)
-                print(f"Upscaled image from {original_size} to {new_size}")
+            # Skip tiny images (likely decorative)
+            if min_dimension < 50 or max_dimension < 50:
+                print(f"Skipping very small image: {original_size}")
+                return None, None
             
-            # Scale down very large images to manage file size
-            elif max_dimension > 2000:
-                scale_factor = 2000 / max_dimension
-                new_size = (int(img.size[0] * scale_factor), int(img.size[1] * scale_factor))
-                img = img.resize(new_size, Image.Resampling.LANCZOS)
-                print(f"Downscaled image from {original_size} to {new_size}")
+            # Multi-stage enhancement for financial documents
+            
+            # 1. Size optimization first (do this before enhancement for better quality)
+            target_size = None
+            if min_dimension < 512:
+                # Scale up small images significantly for better OCR/analysis
+                scale_factor = 512 / min_dimension
+                target_size = (int(img.size[0] * scale_factor), int(img.size[1] * scale_factor))
+                print(f"Upscaling image from {original_size} to {target_size}")
+            elif max_dimension > 2048:
+                # Scale down very large images but keep good detail
+                scale_factor = 2048 / max_dimension
+                target_size = (int(img.size[0] * scale_factor), int(img.size[1] * scale_factor))
+                print(f"Downscaling image from {original_size} to {target_size}")
+            
+            if target_size:
+                img = img.resize(target_size, Image.Resampling.LANCZOS)
+            
+            # 2. Enhanced contrast for better text/number visibility
+            contrast_enhancer = ImageEnhance.Contrast(img)
+            img = contrast_enhancer.enhance(1.4)  # Higher contrast for charts/tables
+            
+            # 3. Sharpness enhancement for clearer details
+            sharpness_enhancer = ImageEnhance.Sharpness(img)
+            img = sharpness_enhancer.enhance(1.3)  # More sharpness for text
+            
+            # 4. Slight brightness adjustment for optimal viewing
+            brightness_enhancer = ImageEnhance.Brightness(img)
+            img = brightness_enhancer.enhance(1.08)
             
             # Create descriptive filename with metadata
             img_hash = hashlib.md5(image_bytes).hexdigest()[:8]
             img_path = os.path.join(output_dir, f"financial_img_{xref}_page{page_num+1}_{img_hash}.png")
             
-            # Save with high quality settings
-            img.save(img_path, "PNG", optimize=True, compress_level=6)
+            # Save with high quality settings (lower compression for better detail)
+            img.save(img_path, "PNG", optimize=True, compress_level=3)
             
-            print(f"Enhanced and saved image: {os.path.basename(img_path)} (size: {img.size})")
+            print(f"✓ Enhanced image: {os.path.basename(img_path)} (final size: {img.size})")
             return img_path, xref
             
         except Exception as e:
@@ -113,8 +120,8 @@ class ImageDescription:
     
     def get_comprehensive_image_context(self, xref, page, text_blocks):
         """
-        Simple context extraction focusing on text before and after images.
-        Returns clean text content for efficient RAG retrieval.
+        Enhanced context extraction that finds relevant text even for standalone tables/charts.
+        Uses multi-stage approach: nearby text > section headers > page content.
         """
         try:
             img_rects = page.get_image_rects(xref)
@@ -123,8 +130,10 @@ class ImageDescription:
             
             img_rect = img_rects[0]
             
-            # Collect relevant text in proximity to image
-            relevant_text = []
+            # Stage 1: Collect text in proximity to image (wider search)
+            nearby_text = []
+            section_headers = []
+            all_text = []
             
             for block in text_blocks:
                 block_rect = fitz.Rect(block[:4])
@@ -133,37 +142,74 @@ class ImageDescription:
                 if not block_text or len(block_text) < 3:
                     continue
                 
+                # Clean and normalize text
+                block_text = ' '.join(block_text.split())
+                
                 # Calculate distance from image
                 img_center_y = (img_rect.y0 + img_rect.y1) / 2
                 block_center_y = (block_rect.y0 + block_rect.y1) / 2
                 vertical_distance = abs(img_center_y - block_center_y)
                 
-                # Include text that's close to the image (within reasonable distance)
-                if vertical_distance <= 200:  # Adjust this threshold as needed
-                    relevant_text.append({
+                # Identify section headers (typically larger/bold text above image)
+                is_above = block_center_y < img_rect.y0
+                is_likely_header = (
+                    is_above and 
+                    vertical_distance < 150 and 
+                    len(block_text) < 200 and
+                    not block_text[0].islower()  # Starts with capital
+                )
+                
+                if is_likely_header:
+                    section_headers.append({
+                        'text': block_text,
+                        'distance': vertical_distance
+                    })
+                
+                # Nearby text (expanded range)
+                if vertical_distance <= 400:  # Increased from 200
+                    nearby_text.append({
                         'text': block_text,
                         'distance': vertical_distance,
-                        'position': 'above' if block_center_y < img_center_y else 'below'
+                        'position': 'above' if is_above else 'below'
                     })
+                
+                # Keep all page text as fallback
+                all_text.append(block_text)
             
-            # Sort by distance and build clean context
-            relevant_text.sort(key=lambda x: x['distance'])
-            
-            # Take the closest 3-4 text blocks and create clean context
+            # Build context from best available source
             context_parts = []
-            for item in relevant_text[:4]:
-                text = item['text']
-                # Clean up the text
-                if len(text) > 10 and text not in [part for part in context_parts]:
-                    context_parts.append(text)
             
-            # Join with proper spacing
-            final_context = ". ".join(context_parts)
+            # Prefer section headers
+            if section_headers:
+                section_headers.sort(key=lambda x: x['distance'])
+                for header in section_headers[:2]:
+                    if header['text'] not in context_parts:
+                        context_parts.append(header['text'])
+            
+            # Add nearby text
+            if nearby_text:
+                nearby_text.sort(key=lambda x: x['distance'])
+                for item in nearby_text[:6]:  # Take more text blocks
+                    text = item['text']
+                    if len(text) > 10 and text not in context_parts:
+                        context_parts.append(text)
+            
+            # Fallback: use any meaningful page content
+            if not context_parts and all_text:
+                # Take first few meaningful paragraphs from page
+                for text in all_text[:10]:
+                    if len(text) > 20:
+                        context_parts.append(text)
+                        if len(context_parts) >= 3:
+                            break
+            
+            # Join context
+            final_context = " ".join(context_parts)
             
             # Limit context length for efficiency
-            if len(final_context) > 800:
+            if len(final_context) > 1000:
                 words = final_context.split()
-                final_context = " ".join(words[:120])
+                final_context = " ".join(words[:150])
             
             return final_context
             
@@ -192,10 +238,10 @@ class ImageDescription:
         processed_images = 0
         
         try:
-            print(f"Processing PDF: {os.path.basename(self.pdf_path)}")
+            print(f"\n🖼️  Processing PDF: {os.path.basename(self.pdf_path)}")
             
-            # Process each page
-            for page_num in range(len(pdf_document)):
+            # Process each page with progress bar
+            for page_num in tqdm(range(len(pdf_document)), desc="Scanning pages for images", unit="page"):
                 page = pdf_document[page_num]
                 text_blocks = page.get_text("blocks")
                 images = page.get_images(full=True)
@@ -204,7 +250,6 @@ class ImageDescription:
                     continue
                 
                 total_images += len(images)
-                print(f"Page {page_num + 1}: Found {len(images)} images")
                 
                 # Process each image on the page
                 for img_index, img_info in enumerate(images):
@@ -236,9 +281,6 @@ class ImageDescription:
                         context_text = self.get_comprehensive_image_context(xref, page, text_blocks)
                         image_details[img_path] = context_text
                         processed_images += 1
-                        
-                        # Log context length for debugging
-                        print(f"  -> Image {processed_images}: Context length {len(context_text)} chars")
                     
             print(f"Successfully processed {processed_images}/{total_images} images")
             print(f"Generated {len(image_hashes)} image hashes")
@@ -281,7 +323,8 @@ class ImageDescription:
 
     def analyze_image_with_context(self, image_path, context_text):
         """
-        Simple, efficient image analysis focused on extracting clean content for RAG.
+        Enhanced image analysis that extracts comprehensive details from financial images.
+        Focuses on extracting structured data, trends, and insights for better RAG retrieval.
         """
         if not os.path.exists(image_path):
             return "Error: Image file not found"
@@ -292,21 +335,46 @@ class ImageDescription:
                 return "Error: Failed to encode image"
             
             prompt = f"""
-            You are analyzing a financial document image. The surrounding text context is:
+            You are analyzing a financial document image. Extract ALL data comprehensively.
             
-            CONTEXT: {context_text}
+            CONTEXT FROM SURROUNDING TEXT: {context_text}
             
-            Please analyze this image and provide a CONCISE description that combines:
-            1. What the image shows (chart type, visual elements)
-            2. The key data/insights from the image
-            3. How it relates to the surrounding text context
+            CRITICAL INSTRUCTIONS:
+            - Financial tables, charts, and data visualizations are NEVER invalid
+            - Extract EVERY number, percentage, dollar amount visible
+            - If you see a table, extract ALL rows and columns
+            - If you see a chart, extract ALL data points and axis values
+            - Include ALL headers, labels, legends, footnotes
             
-            Provide ONLY the essential information. Focus on:
-            - Chart/table type and main topic
-            - Key numbers, percentages, or trends visible
-            - Business context from surrounding text
+            EXTRACT THE FOLLOWING:
             
-            If this is a logo or decorative image, respond with: "INVALID_IMAGE"
+            **Image Type:** [Table | Chart | Graph | Financial Statement | Other]
+            
+            **Main Topic:** [What metric/data is this showing?]
+            
+            **Time Period:** [Years, quarters, or dates shown]
+            
+            **Complete Data Extraction:**
+            For TABLES:
+            - Column headers: [list all]
+            - Row labels: [list all]
+            - All values: [extract every cell value]
+            - Format as: "Header: value, Header2: value2"
+            
+            For CHARTS/GRAPHS:
+            - Chart type: [bar, line, pie, etc.]
+            - Axis labels: [x-axis, y-axis]
+            - Data series: [all visible data points with values]
+            - Legend items: [all categories]
+            
+            **Key Numbers:** [ALL specific numbers, percentages, dollar amounts with their labels]
+            
+            **Insights:** [Growth trends, comparisons, notable changes]
+            
+            **Search Keywords:** [revenue, profit, sales, costs, etc. - whatever is relevant]
+            
+            IMPORTANT: Only respond "INVALID_IMAGE" if this is a pure logo, decorative border, or background pattern with NO data.
+            Any image with numbers, text data, or business information MUST be extracted.
             """
 
             response = self.openai_client.chat.completions.create(
@@ -314,7 +382,19 @@ class ImageDescription:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a financial document analyst. Provide concise, factual descriptions of charts and financial data images. Keep responses brief and focused on key insights."
+                        "content": """You are a financial data extraction specialist. Your job is to extract EVERY piece 
+                        of data from financial images - tables, charts, statements, and visualizations. 
+                        
+                        CRITICAL RULES:
+                        1. Extract ALL numbers with their labels/context
+                        2. For tables: extract EVERY row and column
+                        3. For charts: extract ALL data points
+                        4. Never skip data because it seems redundant
+                        5. Financial images are NEVER decorative - always extract
+                        6. Include units (millions, billions, percentages, etc.)
+                        7. Preserve time periods and comparisons
+                        
+                        Be exhaustive and precise. Missing financial data can cost millions."""
                     },
                     {
                         "role": "user",
@@ -324,15 +404,24 @@ class ImageDescription:
                         ]
                     }
                 ],
-                max_tokens=1000,  # Keep responses concise
+                max_tokens=2000,  # Allow more detailed responses for complex tables
                 temperature=0.1
             )
             
             result = response.choices[0].message.content.strip()
             
-            # Skip invalid images
-            if "INVALID_IMAGE" in result:
+            # Debug logging
+            if not result or len(result) < 10:
+                print(f"\n⚠️  WARNING: Got very short/empty response for {os.path.basename(image_path)}")
+                print(f"Response length: {len(result)}, Content: '{result[:100]}'")
+            
+            # Only skip if explicitly marked invalid (and only if it's truly a logo/decoration)
+            if "INVALID_IMAGE" in result and len(result) < 50:
                 return None
+            
+            # If result is empty or too short, this is likely an error - return a placeholder
+            if not result or len(result) < 10:
+                return f"[Image analysis failed or returned empty - {os.path.basename(image_path)}]"
             
             return result
                 
@@ -348,27 +437,33 @@ class ImageDescription:
         image_analyses = {}
         output_file = os.path.splitext(self.pdf_path)[0] + "_analysis.json"
         
-        print(f"Analyzing {len(contexts)} images...")
+        print(f"\n🤖 Analyzing {len(contexts)} images with GPT-4o...")
         processed_count = 0
+        skipped_count = 0
         
-        for image_path, context_text in contexts.items():
+        for image_path, context_text in tqdm(contexts.items(), desc="Analyzing images", unit="img"):
             try:
-                print(f"Analyzing image: {os.path.basename(image_path)}")
-                
                 result = self.analyze_image_with_context(image_path, context_text)
                 
-                # Skip invalid images
-                if result is None or "INVALID_IMAGE" in str(result):
-                    print(f"Skipping non-financial image: {os.path.basename(image_path)}")
+                # Only skip if explicitly None (truly invalid decoration)
+                if result is None:
+                    skipped_count += 1
+                    print(f"\n⏭️  Skipped decorative image: {os.path.basename(image_path)}")
                     continue
                 
-                # Store clean result
+                # Store result even if it contains INVALID_IMAGE string (might have other data)
+                # or if it's a placeholder for failed analysis
                 image_analyses[image_path] = result
                 processed_count += 1
-                print(f"  -> Processed successfully")
+                
+                # Warn if result seems insufficient
+                if len(result) < 50:
+                    print(f"\n⚠️  Short description for {os.path.basename(image_path)}: {len(result)} chars")
                 
             except Exception as e:
-                print(f"Error analyzing {image_path}: {e}")
+                print(f"\n❌ Error analyzing {image_path}: {e}")
+                # Store error message instead of skipping
+                image_analyses[image_path] = f"[Analysis error: {str(e)}]"
                 continue
         
         # Save simple analysis results
@@ -376,6 +471,7 @@ class ImageDescription:
             "pdf_source": self.pdf_path,
             "total_images_found": len(contexts),
             "successfully_analyzed": processed_count,
+            "skipped_images": skipped_count,
             "analysis_timestamp": str(datetime.now()),
             "image_analyses": image_analyses
         }
@@ -383,8 +479,10 @@ class ImageDescription:
         with open(output_file, "w", encoding="utf-8") as json_file:
             json.dump(analysis_data, json_file, ensure_ascii=False, indent=2)
         
-        print(f"Analysis complete: {processed_count}/{len(contexts)} images processed")
-        print(f"Results saved to: {output_file}")
+        print(f"\n✅ Analysis complete:")
+        print(f"   • Successfully analyzed: {processed_count}/{len(contexts)} images")
+        print(f"   • Skipped (decorative/invalid): {skipped_count} images")
+        print(f"   • Results saved to: {output_file}")
         return output_file
 
     def get_image_data(self,image_path,caption,company):

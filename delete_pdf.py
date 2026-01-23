@@ -22,7 +22,7 @@ from vector_store.load_dbs import load_vector_database
 
 def delete_pdf_from_qdrant(file_name: str) -> dict:
     """
-    Delete all documents associated with a PDF file from Qdrant.
+    Delete all documents associated with a PDF file from unified Qdrant collection.
     
     Args:
         file_name: Name of the PDF file (e.g., "RIVIAN.pdf")
@@ -39,83 +39,73 @@ def delete_pdf_from_qdrant(file_name: str) -> dict:
     }
     
     try:
-        # Initialize database
+        # Initialize database with unified collection
         db_init = load_vector_database()
         
-        # Get vector stores
-        _, text_vectorstore, _ = db_init.get_text_retriever()
-        image_vectorstore, _, _ = db_init.get_image_retriever()
+        print(f"\n=== Deleting {file_name} from unified collection ===")
         
-        # Delete from text collection
-        try:
-            print(f"\n=== Deleting {file_name} from text collection ===")
-            text_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="metadata.source_file",
-                        match=models.MatchValue(value=file_name)
-                    )
-                ]
-            )
-            
-            # Count matching points first
-            count_response = text_vectorstore.client.count(
-                collection_name=text_vectorstore.collection_name,
-                count_filter=text_filter
-            )
-            text_count = count_response.count
-            print(f"Found {text_count} text document(s) to delete")
-            
-            if text_count > 0:
-                # Delete the points
-                text_vectorstore.client.delete(
-                    collection_name=text_vectorstore.collection_name,
-                    points_selector=models.FilterSelector(filter=text_filter)
+        # Filter for all documents from this file
+        delete_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.source_file",
+                    match=models.MatchValue(value=file_name)
                 )
-                print(f"✓ Deleted {text_count} text document(s)")
-                result["text_deleted"] = text_count
-        except Exception as e:
-            print(f"⚠ Error deleting from text collection: {e}")
+            ]
+        )
         
-        # Delete from image collection
-        try:
-            print(f"\n=== Deleting {file_name} from image collection ===")
-            image_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="metadata.source_file",
-                        match=models.MatchValue(value=file_name)
-                    )
-                ]
-            )
-            
-            # Count matching points first
-            count_response = image_vectorstore.client.count(
-                collection_name=image_vectorstore.collection_name,
-                count_filter=image_filter
-            )
-            image_count = count_response.count
-            print(f"Found {image_count} image document(s) to delete")
-            
-            if image_count > 0:
-                # Delete the points
-                image_vectorstore.client.delete(
-                    collection_name=image_vectorstore.collection_name,
-                    points_selector=models.FilterSelector(filter=image_filter)
+        # Count text documents
+        text_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.source_file",
+                    match=models.MatchValue(value=file_name)
+                ),
+                models.FieldCondition(
+                    key="metadata.content_type",
+                    match=models.MatchValue(value="text")
                 )
-                print(f"✓ Deleted {image_count} image document(s)")
-                result["image_deleted"] = image_count
-        except Exception as e:
-            print(f"⚠ Error deleting from image collection: {e}")
+            ]
+        )
+        text_count_response = db_init.qdrant_client.count(
+            collection_name=db_init.collection_name,
+            count_filter=text_filter
+        )
+        result["text_deleted"] = text_count_response.count
+        print(f"Found {result['text_deleted']} text document(s)")
         
-        # Final status
-        result["success"] = True
-        total_deleted = result["text_deleted"] + result["image_deleted"]
+        # Count image documents
+        image_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.source_file",
+                    match=models.MatchValue(value=file_name)
+                ),
+                models.FieldCondition(
+                    key="metadata.content_type",
+                    match=models.MatchValue(value="image")
+                )
+            ]
+        )
+        image_count_response = db_init.qdrant_client.count(
+            collection_name=db_init.collection_name,
+            count_filter=image_filter
+        )
+        result["image_deleted"] = image_count_response.count
+        print(f"Found {result['image_deleted']} image document(s)")
         
-        if total_deleted == 0:
-            print(f"\n⚠ No documents found for {file_name}")
+        # Delete all documents from this file at once
+        total_count = result["text_deleted"] + result["image_deleted"]
+        if total_count > 0:
+            db_init.qdrant_client.delete(
+                collection_name=db_init.collection_name,
+                points_selector=models.FilterSelector(filter=delete_filter)
+            )
+            print(f"✓ Deleted {total_count} document(s) from unified collection")
+            result["success"] = True
         else:
-            print(f"\n✓ Successfully deleted {total_deleted} document(s)")
+            print(f"\n⚠ No documents found for {file_name}")
+            result["success"] = True
         
     except Exception as e:
         result["error"] = str(e)

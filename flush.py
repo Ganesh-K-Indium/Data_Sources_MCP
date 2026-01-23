@@ -35,6 +35,7 @@
 
 
 from qdrant_client import QdrantClient
+from qdrant_client import models
 from qdrant_client.models import (
     Distance,
     VectorParams,
@@ -49,7 +50,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def create_qdrant_collection(collection_name: str, qdrant_url: str):
-    embedding_dim = 1536
+    # Dense embedding size
+    dense_size = 1536  # OpenAI embeddings
 
     client = QdrantClient(
         url=qdrant_url,
@@ -59,18 +61,19 @@ def create_qdrant_collection(collection_name: str, qdrant_url: str):
     print(f"Recreating collection '{collection_name}' with hybrid search (dense + sparse/BM25) and payload indexes...")
 
     # Drop and recreate collection with hybrid search support
-    # Using named vectors: "dense" for semantic similarity, "sparse" for BM25 keyword search
+    # Dense vectors: OpenAI embeddings for semantic search
+    # Sparse vectors: BM25 for keyword matching
     client.recreate_collection(
         collection_name=collection_name,
         vectors_config={
-            "dense": VectorParams(size=embedding_dim, distance=Distance.COSINE)
+            "dense": models.VectorParams(
+                size=dense_size,
+                distance=models.Distance.COSINE,
+            ),
         },
         sparse_vectors_config={
-            "sparse": SparseVectorParams(
-                index=SparseIndexParams(
-                    on_disk=False,  # Set to True for large datasets to save memory
-                ),
-                modifier=Modifier.IDF  # Essential for BM25-like weighting (Inverse Document Frequency)
+            "bm25": models.SparseVectorParams(
+                modifier=models.Modifier.IDF,
             )
         }
     )
@@ -96,12 +99,10 @@ def create_qdrant_collection(collection_name: str, qdrant_url: str):
             field_schema=schema,
         )
 
-    print(f"✅ Collection '{collection_name}' created with hybrid search support (dense + sparse/BM25) and all required indexes.")
+    print(f"✅ Collection '{collection_name}' created with hybrid search support (OpenAI dense + BM25 sparse) and all required indexes.")
 
 
 if __name__ == "__main__":
-    create_qdrant_collection("multimodel_vector_db_hybrid",
-                             qdrant_url="https://edb6ba88-59c8-4b02-b8d1-2e7a7738ca40.us-east-1-1.aws.cloud.qdrant.io:6333")
-
-    create_qdrant_collection("10K_vector_db_hybrid",
+    # Create single unified collection for both text and images
+    create_qdrant_collection("unified_rag_db_hybrid",
                              qdrant_url="https://edb6ba88-59c8-4b02-b8d1-2e7a7738ca40.us-east-1-1.aws.cloud.qdrant.io:6333")

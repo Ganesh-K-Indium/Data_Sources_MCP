@@ -6,6 +6,7 @@ import hashlib
 import traceback
 from datetime import datetime
 import fitz  # PyMuPDF
+from tqdm import tqdm
 from qdrant_client import models
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -18,28 +19,69 @@ load_dotenv()
 
 def init_vector_stores(use_hybrid_search: bool = None):
     """
-    Initialize and return text and image vector stores with proper collection setup.
+    Initialize and return both the database loader and unified vector store.
     
     Args:
         use_hybrid_search: If True, use hybrid collections with BM25. If None, 
-                          auto-detect based on USE_HYBRID_SEARCH env var (default: False)
+                          auto-detect based on USE_HYBRID_SEARCH env var (default: True)
     
     Returns:
-        tuple: (text_vectorstore, image_vectorstore)
+        tuple: (db_loader, unified_vectorstore)
     """
     # Auto-detect hybrid search mode from environment variable if not specified
     if use_hybrid_search is None:
-        use_hybrid_search = os.getenv("USE_HYBRID_SEARCH", "false").lower() == "true"
+        use_hybrid_search = os.getenv("USE_HYBRID_SEARCH", "true").lower() == "true"
     
     db_init = load_vector_database(use_hybrid_search=use_hybrid_search)
     
-    # Initialize text vector store
-    text_retriever, text_vectorstore, _ = db_init.get_text_retriever()
+    # Get unified vector store
+    unified_vectorstore = db_init.get_unified_vectorstore()
     
-    # Initialize image vector store
-    image_vectorstore, image_retriever, _ = db_init.get_image_retriever()
+    return db_init, unified_vectorstore
+
+def ingest_documents_with_hybrid_vectors(db_loader, documents, doc_ids):
+    """
+    Ingest documents with hybrid vectors (dense + sparse).
     
-    return text_vectorstore, image_vectorstore
+    Args:
+        db_loader: The load_vector_database instance
+        documents: List of LangChain Document objects
+        doc_ids: List of document IDs (UUIDs)
+    """
+    # Extract text content from documents
+    texts = [doc.page_content for doc in documents]
+    
+    # Generate all embeddings (dense + sparse)
+    embeddings_dict = db_loader.generate_embeddings_for_ingestion(texts)
+    
+    # Build points for Qdrant
+    points = []
+    for i, doc in enumerate(documents):
+        # Build vector dict with dense and sparse embeddings
+        vector_dict = {"dense": embeddings_dict['dense'][i]}
+        
+        # Add sparse vector if available
+        if embeddings_dict['sparse'][i] is not None:
+            vector_dict["bm25"] = embeddings_dict['sparse'][i]
+        
+        # Create point
+        point = models.PointStruct(
+            id=doc_ids[i],
+            vector=vector_dict,
+            payload={
+                "page_content": doc.page_content,
+                "metadata": doc.metadata
+            }
+        )
+        points.append(point)
+    
+    # Upload to Qdrant using client directly
+    db_loader.qdrant_client.upsert(
+        collection_name=db_loader.collection_name,
+        points=points
+    )
+    
+    return len(points)
 
 # Mapping of stock tickers to company names
 TICKER_TO_COMPANY = {
@@ -461,8 +503,8 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
         source_file_name = os.path.basename(uploaded_pdf_path)
         company_name = extract_company_name(source_file_name)
 
-        # Initialize vector stores
-        text_vectorstore, image_vectorstore = init_vector_stores()
+        # Initialize unified vector store and database loader for hybrid embeddings
+        db_loader, unified_vectorstore = init_vector_stores()
         
         # Calculate content hash for duplicate detection
         content_hash = calculate_content_hash(uploaded_pdf_path)
@@ -470,7 +512,7 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
         
         # --- Text ingestion ---
         text_already_exists = False
-        exists, existing_points = check_document_exists(text_vectorstore, source_file_name, "text", content_hash)
+        exists, existing_points = check_document_exists(unified_vectorstore, source_file_name, "text", content_hash)
         
         if exists:
             text_already_exists = True
@@ -478,7 +520,8 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
 
         if not text_already_exists:
             documents = []
-            for page_num, page in enumerate(pdf_document):
+            print(f"\n📄 Extracting text from {len(pdf_document)} pages...")
+            for page_num, page in enumerate(tqdm(pdf_document, desc="Extracting text", unit="page")):
                 text = page.get_text("text")
                 if text.strip():
                     metadata = {
@@ -493,20 +536,25 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
 
             if documents:
                 yield f"Extracted {len(documents)} text segments from PDF."
+                print(f"\n✂️  Splitting text into chunks...")
                 text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
                     chunk_size=4096, chunk_overlap=400
                 )
                 text_chunks = text_splitter.split_documents(documents)
+                print(f"Created {len(text_chunks)} text chunks")
 
                 # Generate deterministic UUIDs using the common function
                 ids = [generate_doc_id(doc.metadata, i, "text") for i, doc in enumerate(text_chunks)]
-                print("\nDebug: Adding text chunks to Qdrant")
+                print("\nDebug: Adding text chunks to unified Qdrant collection with hybrid vectors")
                 print(f"First chunk metadata sample: {text_chunks[0].metadata}")
                 print(f"First chunk ID: {ids[0]}")
-                text_vectorstore.add_documents(text_chunks, ids=ids)
+                
+                # Ingest with hybrid vectors (dense + sparse)
+                num_ingested = ingest_documents_with_hybrid_vectors(db_loader, text_chunks, ids)
+                
                 print("Debug: Verifying ingestion...")
-                verify_points = text_vectorstore.client.scroll(
-                    collection_name=text_vectorstore.collection_name,
+                verify_points = unified_vectorstore.client.scroll(
+                    collection_name=unified_vectorstore.collection_name,
                     scroll_filter=models.Filter(
                         must=[
                             models.FieldCondition(
@@ -520,7 +568,7 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
                 )[0]
                 if verify_points:
                     print(f"Verification - First point payload: {verify_points[0].payload}")
-                yield f"Added {len(text_chunks)} text chunks from {source_file_name} into Qdrant text vector store."
+                yield f"Added {num_ingested} text chunks with hybrid vectors (dense + sparse/BM25) from {source_file_name}."
             else:
                 yield "No text extracted from PDF."
 
@@ -538,15 +586,15 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
             yield f"Found {len(image_hashes)} images to check for duplicates."
             
             # First try to find by individual image hashes (most precise)
-            exists, existing_img_points = check_document_exists(image_vectorstore, source_file_name, "image", content_hash, image_hashes)
+            exists, existing_img_points = check_document_exists(unified_vectorstore, source_file_name, "image", content_hash, image_hashes)
             
             # If not found by individual hashes, try by PDF content hash (for newer ingestions)
             if not exists:
-                exists, existing_img_points = check_document_exists(image_vectorstore, source_file_name, "image", content_hash)
+                exists, existing_img_points = check_document_exists(unified_vectorstore, source_file_name, "image", content_hash)
             
             # If still not found, try by source file only (for backward compatibility)
             if not exists:
-                exists, existing_img_points = check_document_exists(image_vectorstore, source_file_name, "image")
+                exists, existing_img_points = check_document_exists(unified_vectorstore, source_file_name, "image")
 
             if exists:
                 image_already_exists = True
@@ -581,8 +629,11 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
 
                 # Generate deterministic UUIDs using the common function
                 img_ids = [generate_doc_id(doc.metadata, i, "image") for i, doc in enumerate(image_documents)]
-                image_vectorstore.add_documents(image_documents, ids=img_ids)
-                yield f"Added {len(image_documents)} image captions from {source_file_name} into Qdrant image vector store."
+                
+                # Ingest with hybrid vectors (dense + sparse)
+                num_img_ingested = ingest_documents_with_hybrid_vectors(db_loader, image_documents, img_ids)
+                
+                yield f"Added {num_img_ingested} image captions with hybrid vectors (dense + sparse/BM25) from {source_file_name}."
             else:
                 yield "No images found in PDF."
 

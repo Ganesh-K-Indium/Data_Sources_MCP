@@ -46,9 +46,9 @@ openai
 requests
 python-multipart
 qdrant-client
-qdrant-client[fastembed]
 fastembed
 llama_parse
+tqdm
 
 # Google APIs
 google-api-python-client
