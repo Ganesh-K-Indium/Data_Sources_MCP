@@ -426,15 +426,31 @@ class ImageDescription:
             Row2: Col1=value1, Col2=value2, Col3=value3, ...
             [Continue for ALL rows]
             
-            [FOR CHARTS/GRAPHS - Extract in this format:]
+            [FOR CHARTS/GRAPHS - CRITICAL: Extract ACTUAL VALUES, not descriptions!]
             CHART DATA:
             - Type: [bar/line/pie/scatter]
-            - X-axis: [label and all values]
-            - Y-axis: [label, unit, scale]
-            - Data Series 1 [name]: point1=value, point2=value, ...
-            - Data Series 2 [name]: point1=value, point2=value, ...
-            [Continue for ALL series]
-            - Legend: [all legend items]
+            - X-axis Label: [name]
+            - Y-axis Label: [name and unit]
+            - Time Points: [list ALL dates/periods on X-axis]
+            
+            DATA SERIES (MANDATORY - Read actual values from the chart):
+            For EACH line/series, trace it across the chart and READ the Y-axis value at each X-axis point:
+            
+            Series: [Name from legend]
+            - [Date1]: $[value] (read from Y-axis where line intersects)
+            - [Date2]: $[value] (read from Y-axis where line intersects)
+            - [Date3]: $[value] (read from Y-axis where line intersects)
+            [Continue for EVERY time point]
+            
+            Example for stock chart:
+            Series: Alphabet Inc. Class A
+            - 12/19: $100
+            - 3/20: $95
+            - 6/20: $110
+            [etc. for all points]
+            
+            CRITICAL: Do NOT write "Data points not numerically specified"
+            You MUST estimate values by visually reading where each line crosses each time point.
             
             **All Numbers Found:** [List EVERY number with its label: "Total Revenue 2023: $134,902M", "Growth Rate: 15.7%", etc.]
             
@@ -447,9 +463,15 @@ class ImageDescription:
             VALIDATION: Before submitting, verify you've extracted:
             - ✓ Every number from OCR text
             - ✓ Every row and column if it's a table
-            - ✓ Every data point if it's a chart
+            - ✓ Every data point if it's a chart (NOT "not specified")
+            - ✓ For line charts: Actual values at EVERY time point for EVERY line
+            - ✓ For stock charts: Price at every date shown
             - ✓ All time periods
             - ✓ All labels and headers
+            
+            CHART VALIDATION EXAMPLE:
+            ❌ BAD: "Data Series 1 [Stock A]: Data points not numerically specified"
+            ✅ GOOD: "Data Series 1 [Stock A]: 12/19=$100, 3/20=$95, 6/20=$110, 9/20=$130..."
             
             Only respond "INVALID_IMAGE" if this is purely decorative (logo, border, background) with ZERO data.
             """
@@ -466,21 +488,32 @@ class ImageDescription:
                         ===========================
                         1. Extract 100% of numbers - EVERY value, percentage, dollar amount
                         2. For tables: Extract EVERY cell in EVERY row and column
-                        3. For charts: Extract EVERY data point, axis value, and legend item
-                        4. Use OCR text provided - it contains the actual numbers
-                        5. Never summarize - extract complete raw data
-                        6. Never skip rows because they seem similar
-                        7. Include ALL units ($, M, B, %, basis points)
-                        8. Preserve ALL time periods (years, quarters, dates)
-                        9. Extract ALL headers, labels, footnotes, asterisks
-                        10. Cross-reference image with OCR to ensure accuracy
+                        3. For LINE/BAR CHARTS: READ actual values where lines/bars intersect time points
+                        4. Use OCR text provided - it contains actual numbers
+                        5. VISUALLY READ values from charts - trace each line and read Y-axis value
+                        6. Never write "not specified" or "not numerically specified"
+                        7. Never summarize - extract complete raw data
+                        8. Never skip rows because they seem similar
+                        9. Include ALL units ($, M, B, %, basis points)
+                        10. Preserve ALL time periods (years, quarters, dates)
+                        11. Extract ALL headers, labels, footnotes, asterisks
+                        12. Cross-reference image with OCR to ensure accuracy
+                        
+                        CHART-SPECIFIC RULES:
+                        =====================
+                        - For LINE CHARTS: Trace each line from left to right
+                        - At EACH X-axis point, read the Y-axis value where the line crosses
+                        - For STOCK CHARTS: Extract the price at every time period shown
+                        - If OCR doesn't have values, ESTIMATE from visual by reading grid lines
+                        - Approximate to nearest visible grid value (e.g., if between $145-$150, estimate $147)
                         
                         QUALITY STANDARDS:
                         ==================
                         - If table has 50 rows, extract ALL 50 rows
-                        - If chart has 20 data points, extract ALL 20
+                        - If line chart has 20 time points, extract ALL 20 values per line
                         - Missing even 1 number is FAILURE
-                        - Rounding numbers is FAILURE
+                        - Writing "not specified" is FAILURE
+                        - Rounding numbers is acceptable for line chart estimates
                         - Summarizing data is FAILURE
                         
                         This is SEC filing data. Accuracy is legally critical. Be exhaustive."""
