@@ -29,6 +29,8 @@ faiss-cpu
 pymupdf
 pillow
 pypdf
+easyocr
+pytesseract
 
 # Analysis & Table Extraction
 beautifulsoup4

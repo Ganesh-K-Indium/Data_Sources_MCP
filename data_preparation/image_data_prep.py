@@ -11,6 +11,7 @@ from PIL import Image, ImageEnhance
 from langchain_core.documents import Document
 from pathlib import Path
 from dotenv import load_dotenv
+import pytesseract
 
 load_dotenv()
 
@@ -24,6 +25,46 @@ class ImageDescription:
         """
         self.pdf_path = pdf_path
         self.openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+    def extract_text_from_image_ocr(self, image_path):
+        """
+        Extract ALL text and numbers from image using OCR.
+        Critical for financial documents where every number matters.
+        Uses Tesseract OCR to capture all visible text.
+        """
+        try:
+            if not os.path.exists(image_path):
+                return ""
+            
+            # Read and preprocess image for better OCR
+            img = Image.open(image_path)
+            
+            # Convert to RGB if needed
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Enhance for better OCR
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(1.5)  # Increase contrast
+            
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(1.5)  # Increase sharpness
+            
+            # Extract text using Tesseract with optimized config for tables/numbers
+            # --psm 6: Assume a single uniform block of text
+            # --oem 3: Use both legacy and LSTM engines
+            custom_config = r'--oem 3 --psm 6'
+            extracted_text = pytesseract.image_to_string(img, config=custom_config)
+            
+            return extracted_text.strip()
+            
+        except Exception as e:
+            # If Tesseract not installed, gracefully degrade
+            if "TesseractNotFoundError" in str(type(e).__name__):
+                print(f"   ⚠️  Tesseract OCR not installed - using vision-only mode")
+                return "[OCR unavailable - using GPT-4o vision only]"
+            print(f"   ⚠️  OCR extraction failed for {os.path.basename(image_path)}: {e}")
+            return ""
         if not self.openai_client.api_key:
             raise ValueError("OpenAI API key not found in environment variables")
     
@@ -323,58 +364,94 @@ class ImageDescription:
 
     def analyze_image_with_context(self, image_path, context_text):
         """
-        Enhanced image analysis that extracts comprehensive details from financial images.
-        Focuses on extracting structured data, trends, and insights for better RAG retrieval.
+        COMPREHENSIVE image analysis using OCR + GPT-4o Vision.
+        Ensures ALL financial data is extracted - critical for 10-K documents.
         """
         if not os.path.exists(image_path):
             return "Error: Image file not found"
             
         try:
+            # Step 1: Extract ALL text using OCR
+            print(f"   📝 Running OCR on {os.path.basename(image_path)}...")
+            ocr_text = self.extract_text_from_image_ocr(image_path)
+            
+            if ocr_text:
+                print(f"   ✅ OCR extracted {len(ocr_text)} characters")
+            else:
+                print(f"   ⚠️  OCR found no text")
+            
+            # Step 2: Encode image for GPT-4o
             image_base64 = self.encode_image(image_path)
             if not image_base64:
                 return "Error: Failed to encode image"
             
+            # Step 3: Enhanced prompt with OCR data
             prompt = f"""
-            You are analyzing a financial document image. Extract ALL data comprehensively.
+            You are analyzing a financial document image (10-K filing). Your job is to extract EVERY piece of financial data.
             
-            CONTEXT FROM SURROUNDING TEXT: {context_text}
+            CONTEXT FROM SURROUNDING TEXT IN PDF:
+            {context_text}
             
-            CRITICAL INSTRUCTIONS:
-            - Financial tables, charts, and data visualizations are NEVER invalid
-            - Extract EVERY number, percentage, dollar amount visible
-            - If you see a table, extract ALL rows and columns
-            - If you see a chart, extract ALL data points and axis values
-            - Include ALL headers, labels, legends, footnotes
+            OCR-EXTRACTED TEXT FROM IMAGE:
+            {ocr_text}
             
-            EXTRACT THE FOLLOWING:
+            CRITICAL INSTRUCTIONS FOR 10-K DOCUMENTS:
+            ============================================
+            1. Extract EVERY SINGLE NUMBER visible in the image
+            2. Extract ALL row and column headers from tables
+            3. Extract ALL data points from charts/graphs
+            4. Include units (millions, billions, %, $, etc.)
+            5. Preserve exact values - DO NOT round or summarize
+            6. If OCR text contains numbers, USE THEM - don't guess from visual
+            7. Financial images are NEVER decorative - always extract data
             
-            **Image Type:** [Table | Chart | Graph | Financial Statement | Other]
+            REQUIRED OUTPUT FORMAT:
+            =======================
             
-            **Main Topic:** [What metric/data is this showing?]
+            **Image Type:** [Table | Bar Chart | Line Chart | Pie Chart | Financial Statement | Other]
             
-            **Time Period:** [Years, quarters, or dates shown]
+            **Title/Topic:** [Exact title or main topic]
+            
+            **Time Period:** [All years, quarters, or dates visible]
             
             **Complete Data Extraction:**
-            For TABLES:
-            - Column headers: [list all]
-            - Row labels: [list all]
-            - All values: [extract every cell value]
-            - Format as: "Header: value, Header2: value2"
             
-            For CHARTS/GRAPHS:
-            - Chart type: [bar, line, pie, etc.]
-            - Axis labels: [x-axis, y-axis]
-            - Data series: [all visible data points with values]
-            - Legend items: [all categories]
+            [FOR TABLES - Extract in this format:]
+            TABLE STRUCTURE:
+            - Column Headers: [list ALL column names]
+            - Row Labels: [list ALL row names]
             
-            **Key Numbers:** [ALL specific numbers, percentages, dollar amounts with their labels]
+            TABLE DATA (extract EVERY cell):
+            Row1: Col1=value1, Col2=value2, Col3=value3, ...
+            Row2: Col1=value1, Col2=value2, Col3=value3, ...
+            [Continue for ALL rows]
             
-            **Insights:** [Growth trends, comparisons, notable changes]
+            [FOR CHARTS/GRAPHS - Extract in this format:]
+            CHART DATA:
+            - Type: [bar/line/pie/scatter]
+            - X-axis: [label and all values]
+            - Y-axis: [label, unit, scale]
+            - Data Series 1 [name]: point1=value, point2=value, ...
+            - Data Series 2 [name]: point1=value, point2=value, ...
+            [Continue for ALL series]
+            - Legend: [all legend items]
             
-            **Search Keywords:** [revenue, profit, sales, costs, etc. - whatever is relevant]
+            **All Numbers Found:** [List EVERY number with its label: "Total Revenue 2023: $134,902M", "Growth Rate: 15.7%", etc.]
             
-            IMPORTANT: Only respond "INVALID_IMAGE" if this is a pure logo, decorative border, or background pattern with NO data.
-            Any image with numbers, text data, or business information MUST be extracted.
+            **Key Metrics:** [Main KPIs and their values]
+            
+            **Notes/Footnotes:** [Any footnotes, asterisks, or notes visible]
+            
+            **Search Keywords:** [Terms for searchability: revenue, EBITDA, assets, etc.]
+            
+            VALIDATION: Before submitting, verify you've extracted:
+            - ✓ Every number from OCR text
+            - ✓ Every row and column if it's a table
+            - ✓ Every data point if it's a chart
+            - ✓ All time periods
+            - ✓ All labels and headers
+            
+            Only respond "INVALID_IMAGE" if this is purely decorative (logo, border, background) with ZERO data.
             """
 
             response = self.openai_client.chat.completions.create(
@@ -382,19 +459,31 @@ class ImageDescription:
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are a financial data extraction specialist. Your job is to extract EVERY piece 
-                        of data from financial images - tables, charts, statements, and visualizations. 
+                        "content": """You are a financial data extraction specialist for 10-K SEC filings. 
+                        Your SOLE PURPOSE is to extract EVERY SINGLE piece of data from financial images.
                         
-                        CRITICAL RULES:
-                        1. Extract ALL numbers with their labels/context
-                        2. For tables: extract EVERY row and column
-                        3. For charts: extract ALL data points
-                        4. Never skip data because it seems redundant
-                        5. Financial images are NEVER decorative - always extract
-                        6. Include units (millions, billions, percentages, etc.)
-                        7. Preserve time periods and comparisons
+                        MANDATORY EXTRACTION RULES:
+                        ===========================
+                        1. Extract 100% of numbers - EVERY value, percentage, dollar amount
+                        2. For tables: Extract EVERY cell in EVERY row and column
+                        3. For charts: Extract EVERY data point, axis value, and legend item
+                        4. Use OCR text provided - it contains the actual numbers
+                        5. Never summarize - extract complete raw data
+                        6. Never skip rows because they seem similar
+                        7. Include ALL units ($, M, B, %, basis points)
+                        8. Preserve ALL time periods (years, quarters, dates)
+                        9. Extract ALL headers, labels, footnotes, asterisks
+                        10. Cross-reference image with OCR to ensure accuracy
                         
-                        Be exhaustive and precise. Missing financial data can cost millions."""
+                        QUALITY STANDARDS:
+                        ==================
+                        - If table has 50 rows, extract ALL 50 rows
+                        - If chart has 20 data points, extract ALL 20
+                        - Missing even 1 number is FAILURE
+                        - Rounding numbers is FAILURE
+                        - Summarizing data is FAILURE
+                        
+                        This is SEC filing data. Accuracy is legally critical. Be exhaustive."""
                     },
                     {
                         "role": "user",
@@ -404,8 +493,8 @@ class ImageDescription:
                         ]
                     }
                 ],
-                max_tokens=2000,  # Allow more detailed responses for complex tables
-                temperature=0.1
+                max_tokens=3000,  # Increased for complete table extraction
+                temperature=0  # Zero temperature for maximum accuracy
             )
             
             result = response.choices[0].message.content.strip()

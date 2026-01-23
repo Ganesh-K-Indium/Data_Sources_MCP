@@ -602,15 +602,19 @@ def process_pdf_and_stream(uploaded_pdf_path: str):
 
         if not image_already_exists:
             if image_info:  # image_info already extracted above
+                # CRITICAL: Analyze images with GPT-4o to extract ALL financial data
+                yield f"🤖 Analyzing {len(image_info)} images with GPT-4o (extracting all data)..."
+                image_descriptions = img_processor.get_image_description(image_info)
+                
                 # Save metadata with timestamp - FLAT STRUCTURE for getRetriever compatibility
                 metadata_path = f"metadata_{source_file_name}.json"
                 # The getRetriever method expects: { "image_path": "caption_text", ... }
                 # not { "metadata": { "image_path": "caption_text" } }
-                metadata_to_save = image_info.copy()  # Use image_info directly (flat structure)
+                metadata_to_save = image_descriptions  # Use analyzed descriptions, not just context!
                 
                 with open(metadata_path, "w", encoding="utf-8") as f:
                     json.dump(metadata_to_save, f, indent=2)
-                yield f"Saved image metadata to {metadata_path}"
+                yield f"Saved detailed image analysis to {metadata_path}"
 
                 # Get image documents with enhanced metadata including hashes
                 image_documents = img_processor.getRetriever(
